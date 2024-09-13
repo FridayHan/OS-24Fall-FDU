@@ -7,11 +7,25 @@
 
 RefCount kalloc_page_cnt;
 
+struct link
+{
+    void *addr;
+    void *next;
+};
+
 void kinit() {
     init_rc(&kalloc_page_cnt);
 // 最好用static限制作用于再当前文件
     // KERNLINK + end
-    // end & 0xffff
+    static 
+    static void *start_addr = end & 0xfffff000 + 0x1000;
+    for (int i = start_addr; i < 0x80000000; i+=4096)
+    {
+        link a;
+        link -> addr = i + FFFF0000;
+        link -> next
+    }
+    static 
     // static int page_id;
 
 }
