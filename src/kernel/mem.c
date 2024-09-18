@@ -7,46 +7,57 @@
 
 RefCount kalloc_page_cnt;
 
-struct link
-{
+typedef struct Node {
     void *addr;
-    void *next;
-};
+    struct Node *next;
+} Node;
 
-void kinit() {
+static Node *free_list_head = NULL;
+
+extern char end[];
+
+void kinit()
+{
     init_rc(&kalloc_page_cnt);
-// 最好用static限制作用于再当前文件
-    // KERNLINK + end
-    static 
-    static void *start_addr = end & 0xfffff000 + 0x1000;
-    for (int i = start_addr; i < 0x80000000; i+=4096)
-    {
-        link a;
-        link -> addr = i + FFFF0000;
-        link -> next
-    }
-    static 
-    // static int page_id;
 
+    // 最好用static限制作用于再当前文件
+    // KERNLINK + end
+
+    static void *start_addr =
+            (void *)((unsigned long)end & 0xfffff000 + 0x1000);
+    unsigned long max_addr = 0x80000000;
+
+    for (int addr = start_addr; addr < max_addr; addr += 4096) {
+        Node *page = (Node *)addr;
+        page->addr = (void *)addr;
+        page->next = free_list_head;
+        free_list_head = page;
+    }
+
+    // static int page_id;
 }
 
-void* kalloc_page() {
+void *kalloc_page()
+{
     increment_rc(&kalloc_page_cnt);
-// 可用内存从end开始，但是end没有按照4k对齐
+    // 可用内存从end开始，但是end没有按照4k对齐
 
     return NULL;
 }
 
-void kfree_page(void* p) {
+void kfree_page(void *p)
+{
     decrement_rc(&kalloc_page_cnt);
-// 不能用递归
+    // 不能用递归
     return;
 }
 
-void* kalloc(unsigned long long size) {
+void *kalloc(unsigned long long size)
+{
     return NULL;
 }
 
-void kfree(void* ptr) {
+void kfree(void *ptr)
+{
     return;
 }
