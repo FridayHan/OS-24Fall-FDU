@@ -14,29 +14,11 @@ typedef struct Block {
 } Block;
 
 typedef struct Page {
-    struct header {
-        bool is_full;
-        int block_size;
-        Block *free_list_head;
-    } header;
-    void *addr;
-    struct Page *next;
+    ListNode list;
+    unsigned char bitmap
 } Page;
 
-typedef struct Used_Blocklist {
-    bool is_full;
-    Block *used_list_head;
-} Used_Blocklist;
-
-static Used_Blocklist used_Blocklist[12] = {
-    {true, NULL}, {true, NULL}, {true, NULL}, {true, NULL}, {true, NULL}, 
-    {true, NULL}, {true, NULL}, {true, NULL}, {true, NULL}, {true, NULL}, 
-    {true, NULL}, {true, NULL}
-};
-
 static Page *free_list_head = NULL;
-
-// static Page *used_list_head = NULL;
 
 void kinit()
 {
@@ -48,9 +30,8 @@ void kinit()
 
     static void *start_addr =
             (void *)(((unsigned long)end & 0xfffff000) + 0x1000);
-    unsigned long max_addr = 0x80000000;
 
-    for (unsigned long addr = (unsigned long)start_addr; addr < max_addr; addr += 4096) {
+    for (unsigned long addr = (unsigned long)start_addr; addr < PHYSTOP; addr += PAGE_SIZE) {
         Page *page = (Page *)addr;
         page->addr = (void *)addr;
         page->next = free_list_head;
