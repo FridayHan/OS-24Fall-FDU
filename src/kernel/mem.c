@@ -3,22 +3,23 @@
 #include <common/spinlock.h>
 #include <driver/memlayout.h>
 #include <kernel/mem.h>
-// #include <kernel/printk.h>
+#include <common/list.h>
+#include <common/defines.h>
+#include <kernel/printk.h>
+
+#define BLOCK_SIZE 32
+#define BLOCKS_PER_PAGE (PAGE_SIZE / BLOCK_SIZE)
 
 RefCount kalloc_page_cnt;
 
-typedef struct Block {
-    
-    void *addr;
-    struct Block *next;
-} Block;
-
 typedef struct Page {
     ListNode list;
-    unsigned char bitmap
+    unsigned char bitmap[BLOCKS_PER_PAGE / 8];
 } Page;
 
-static Page *free_list_head = NULL;
+ListNode free_pages;
+ListNode used_pages;
+extern char end[];
 
 void kinit()
 {
@@ -26,12 +27,14 @@ void kinit()
 
     // 最好用static限制作用于再当前文件
     // KERNLINK + end
-    extern char end[];
 
-    static void *start_addr =
-            (void *)(((unsigned long)end & 0xfffff000) + 0x1000);
+    free_pages.next = NULL;
+    used_pages.next = NULL;
 
-    for (unsigned long addr = (unsigned long)start_addr; addr < PHYSTOP; addr += PAGE_SIZE) {
+    unsigned long long start_phys = round_up(K2P_WO((unsigned long long)end), PAGE_SIZE);
+    unsigned long long end_phys = PHYSTOP;
+
+    for (unsigned long addr = (unsigned long)start_phys; addr < PHYSTOP; addr += PAGE_SIZE) {
         Page *page = (Page *)addr;
         page->addr = (void *)addr;
         page->next = free_list_head;
