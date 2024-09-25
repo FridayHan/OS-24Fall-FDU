@@ -16,10 +16,13 @@ typedef struct Page {
     ListNode list;
     void *addr;
     unsigned char bitmap[BLOCKS_PER_PAGE / 8];
+    SpinLock lock;
 } Page;
 
 ListNode free_pages;
 ListNode used_pages;
+SpinLock free_pages_lock;
+SpinLock used_pages_lock;
 extern char end[];
 
 void my_memset(void *s, int c, unsigned long long n) {
@@ -33,8 +36,8 @@ void kinit()
 {
     init_rc(&kalloc_page_cnt);
 
-    // 最好用static限制作用于再当前文件
-    // KERNLINK + end
+    init_spinlock(&free_pages_lock);
+    init_spinlock(&used_pages_lock);
 
     free_pages.next = NULL;
     used_pages.next = NULL;
@@ -47,6 +50,7 @@ void kinit()
     for (unsigned long addr = (unsigned long)start_phys; addr < PHYSTOP; addr += PAGE_SIZE) {
         void* page_addr = (void*)P2K_WO(addr);
         Page *page = (Page *)page_addr;
+        init_spinlock(&page->lock);
 
         my_memset(page->bitmap, 0, sizeof(page->bitmap));
 
@@ -64,18 +68,27 @@ void *kalloc_page()
 {
     increment_rc(&kalloc_page_cnt);
 
+    acquire_spinlock(&free_pages_lock);
+    printk("Trying to acquire lock at %s:%d\n", __FILE__, __LINE__);
+
     if (free_pages.next != NULL) {
         Page* page = container_of(free_pages.next, Page, list);
         free_pages.next = page->list.next;
         page->list.next = NULL;
-
+        
         page->list.next = used_pages.next;
         used_pages.next = &page->list;
 
         printk("kalloc_page: Allocated page %p\n", page);
 
+        release_spinlock(&free_pages_lock);
+        printk("Trying to release lock at %s:%d\n", __FILE__, __LINE__);
+
         return page->addr;
     }
+
+    release_spinlock(&free_pages_lock);
+    printk("Trying to release lock at %s:%d\n", __FILE__, __LINE__);
 
     printk("kalloc_page: No free pages available\n");
     return NULL;
@@ -84,6 +97,9 @@ void *kalloc_page()
 void kfree_page(void *p)
 {
     decrement_rc(&kalloc_page_cnt);
+
+    acquire_spinlock(&used_pages_lock);
+    printk("Trying to acquire lock at %s:%d\n", __FILE__, __LINE__);
 
     if (p != NULL) {
         Page *page = (Page *)p;
@@ -103,24 +119,13 @@ void kfree_page(void *p)
         free_pages.next = &page->list;
     }
 
+    release_spinlock(&free_pages_lock);
+    printk("Trying to release lock at %s:%d\n", __FILE__, __LINE__);
+
     printk("kfree_page: Freed page %p\n", p);
 
     return;
 }
-
-// unsigned long long round(unsigned long long size)
-// {
-//     unsigned long long tmp = size & (~size + 1);
-//     if (tmp == size)
-//         return size;
-//     else {
-//         tmp = 2;
-//         while (size >>= 1 != 0) {
-//             tmp += 1;
-//         }
-//         return tmp;
-//     }
-// }
 
 void *kalloc(unsigned long long size)
 {
@@ -128,8 +133,17 @@ void *kalloc(unsigned long long size)
 
     int blocks_needed = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
+
+    static SpinLock allocator_lock = {0};
+    init_spinlock(&allocator_lock);
+    acquire_spinlock(&allocator_lock);
+    printk("Trying to acquire lock at %s:%d\n", __FILE__, __LINE__);
+
     Page* target_page = NULL;
     int block_start = -1;
+
+    acquire_spinlock(&used_pages_lock);
+    printk("Trying to acquire lock at %s:%d\n", __FILE__, __LINE__);
 
     ListNode* current_node = used_pages.next;
     while (current_node != NULL) {
@@ -167,11 +181,15 @@ void *kalloc(unsigned long long size)
 
         current_node = current_node->next;
     }
+    release_spinlock(&used_pages_lock);
+    printk("Trying to release lock at %s:%d\n", __FILE__, __LINE__);
 
     if (target_page == NULL) {
         // 没有找到合适的块，尝试分配新页
         target_page = (Page*)kalloc_page();
         if (target_page == NULL) {
+            // release_spinlock(&allocator_lock);
+            printk("Trying to release lock at %s:%d\n", __FILE__, __LINE__);
             return NULL;
         }
 
@@ -186,6 +204,9 @@ void *kalloc(unsigned long long size)
 
     unsigned long long page_addr = (unsigned long long)target_page;
     unsigned long long block_addr = page_addr + block_start * BLOCK_SIZE;
+
+    release_spinlock(&allocator_lock);
+    printk("Trying to release lock at %s:%d\n", __FILE__, __LINE__);
 
     printk("kalloc: Allocated %llu bytes at %llx (page: %p, block_start: %d)\n",
            size, block_addr, target_page, block_start);
@@ -206,7 +227,10 @@ void *kalloc(unsigned long long size)
 
 void kfree(void *ptr)
 {
-    if (ptr == NULL) return;
+    if (ptr == NULL) {
+        printk("kfree: NULL pointer\n");
+        return;
+    }
 
     unsigned long long addr = (unsigned long long)ptr;
     unsigned long long page_addr = addr & ~(PAGE_SIZE - 1);
@@ -217,6 +241,11 @@ void kfree(void *ptr)
         printk("kfree: Invalid block index %d for ptr %p\n", block_index, ptr);
         return;
     }
+
+    static SpinLock allocator_lock = {0};
+    init_spinlock(&allocator_lock);
+    acquire_spinlock(&allocator_lock);
+    printk("Trying to acquire lock at %s:%d\n", __FILE__, __LINE__);
 
     int byte = block_index / 8;
     int bit = block_index % 8;
@@ -231,6 +260,9 @@ void kfree(void *ptr)
     }
 
     if (all_free) {
+        acquire_spinlock(&used_pages_lock);
+        printk("Trying to acquire lock at %s:%d\n", __FILE__, __LINE__);
+
         ListNode* prev = &used_pages;
         ListNode* current = used_pages.next;
         while (current != NULL) {
@@ -244,8 +276,13 @@ void kfree(void *ptr)
 
         page->list.next = free_pages.next;
         free_pages.next = page->list.next;
+        release_spinlock(&used_pages_lock);
+        printk("Trying to release lock at %s:%d\n", __FILE__, __LINE__);
     }
     
+    release_spinlock(&allocator_lock);
+    printk("Trying to release lock at %s:%d\n", __FILE__, __LINE__);
+
     printk("kfree: Freed block %d at %p (page: %p)\n", block_index, ptr, page);
     return;
 }
