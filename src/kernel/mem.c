@@ -9,12 +9,19 @@
 
 RefCount kalloc_page_cnt;
 
+extern char end[];
+
 // typedef struct Page {
 //     QueueNode node;
 //     SpinLock lock;
 // } Page;
 
-static PagedAllocator allocator;
+typedef struct {
+    QueueNode* free_list;
+    SpinLock lock;
+} PagedAllocator;
+
+PagedAllocator allocator;
 
 void kinit()
 {
@@ -23,7 +30,7 @@ void kinit()
     allocator.free_list = NULL;
     init_spinlock(&allocator.lock);
     
-    u64 addr = round_up(K2P((u64)end), PAGE_SIZE);
+    unsigned long long addr = round_up(K2P((unsigned long long)end), PAGE_SIZE);
     printk("kinit: Initializing Paged Allocator. Starting from physical address %p. Free pages: %llu\n", (void*)addr, (PHYSTOP - addr) / PAGE_SIZE);
     for (; addr < PHYSTOP; addr += PAGE_SIZE) {
         QueueNode* new_page = (QueueNode*)addr;
@@ -51,14 +58,14 @@ void *kalloc_page()
 
     release_spinlock(&allocator.lock);
 
-    return (void*)P2K((u64)allocated_page);
+    return (void*)P2K((unsigned long long)allocated_page);
 }
 
 void kfree_page(void *p)
 {
     decrement_rc(&kalloc_page_cnt);
 
-    QueueNode* page = (QueueNode*)K2P((u64)p);
+    QueueNode* page = (QueueNode*)K2P((unsigned long long)p);
     acquire_spinlock(&allocator.lock);
 
     page->next = allocator.free_list;
@@ -67,10 +74,10 @@ void kfree_page(void *p)
 
 }
 
-void *kalloc(u64 size)
+void *kalloc(unsigned long long size)
 {
-    if (size > PAGE_SIZE / 2) {
-        printk("kalloc: Requested size %llu exceeds MAX.\n", size);
+    if (size > PAGE_SIZE) {
+        printk("kalloc: Requested size %llu exceeds PAGE_SIZE.\n", size);
         return NULL;
     }
 
