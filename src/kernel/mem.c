@@ -14,7 +14,7 @@ static PagedAllocator allocator;
 static Page* free_pages = NULL;
 static SpinLock free_pages_lock;
 
-u64 align_size(u64 size) {
+u16 align_size(u16 size) {
     for (int i = 0; i < MAX_SIZE_CLASS; i++) {
         if (size <= size_classes[i]) {
             return size_classes[i];
@@ -22,20 +22,18 @@ u64 align_size(u64 size) {
     }
     // 默认对齐到最大的大小类别
     return size_classes[MAX_SIZE_CLASS - 1];
-
-    // 原来实现（简洁但鲁棒性差）
+    // 简洁但可维护性差的实现
     // return round_up(size, 8);
 }
 
-int get_size_class(u64 size) {
+int get_size_class(u16 size) {
     for (int i = 0; i < MAX_SIZE_CLASS; i++) {
         if (size <= size_classes[i]) {
             return i;
         }
     }
-    return -1; // 大小过大
-
-    // 原来的实现，简洁但鲁棒性差
+    return -1;
+    // 简洁但可维护性差的实现
     // if (size <= 8)
     //     return 0;
     // return 61 - __builtin_clzll(size - 1);
@@ -69,7 +67,7 @@ void kinit()
     return;
 }
 
-void kinit_page(Page* page, u64 block_size)
+void kinit_page(Page* page, u16 block_size)
 {
     // ERROR: 检查页是否为空
     if (!page) {
@@ -77,15 +75,14 @@ void kinit_page(Page* page, u64 block_size)
         return;
     }
 
-    u64 size_class = get_size_class(block_size);
-
+    int size_class = get_size_class(block_size);
     page->free_list_num = (USABLE_PAGE_SIZE(block_size)) / block_size;
     page->block_size = block_size;
     page->free_list = NULL;
     page->next = NULL;
 
     // 初始化页内的自由块链表
-    char* block_ptr = (char*)round_up((u64)((char*)page + sizeof(Page)), block_size);
+    char* block_ptr = (char*)round_up((u64)((char*)page + sizeof(Page)), (u64)block_size);
     for (int i = 0; i < page->free_list_num; i++) {
         *((void**)block_ptr) = page->free_list;
         page->free_list = block_ptr;
@@ -138,23 +135,23 @@ void kfree_page(void *p)
     return;
 }
 
-void *kalloc(u64 size)
+void *kalloc(u16 size)
 {
     // ERROR: 检查请求的大小是否合法
     if (size == 0 || size > PAGE_SIZE / 2) {
-        printk("kalloc error: size error. Requested size: %llu.\n", size);
+        printk("kalloc error: size error. Requested size: %u.\n", size);
         return NULL;
     }
 
     // 对齐请求的大小
-    u64 aligned_size = align_size(size);
+    u16 aligned_size = align_size(size);
     int size_class = get_size_class(aligned_size);
 
     acquire_spinlock(&allocator.locks[size_class]);
 
     // ERROR: 没有合适的大小类别
     if (size_class == -1) {
-        printk("kalloc: No suitable size class for size %llu.\n", aligned_size);
+        printk("kalloc: No suitable size class for size %u.\n", aligned_size);
         return NULL;
     }
 
@@ -200,7 +197,7 @@ void kfree(void *ptr)
 
     void* page_virt_addr = (void*)P2K(page_phys_addr);
     Page* page = (Page*)page_virt_addr;
-    u64 block_size = page->block_size;
+    u16 block_size = page->block_size;
     int size_class = get_size_class(block_size);
 
     acquire_spinlock(&allocator.locks[size_class]);
@@ -234,7 +231,6 @@ void kfree(void *ptr)
         }
         kfree_page(page);
     }
-
 
     release_spinlock(&allocator.locks[size_class]);
     return;
