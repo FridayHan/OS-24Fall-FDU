@@ -11,59 +11,82 @@ RefCount kalloc_page_cnt;
 
 static PagedAllocator allocator;
 
-static Page* free_pages;
+static Page* free_pages = NULL;
 static SpinLock free_pages_lock;
+
+u64 align_size(u64 size) {
+    for (int i = 0; i < MAX_SIZE_CLASS; i++) {
+        if (size <= size_classes[i]) {
+            return size_classes[i];
+        }
+    }
+    // 默认对齐到最大的大小类别
+    return size_classes[MAX_SIZE_CLASS - 1];
+
+    // 原来实现（简洁但鲁棒性差）
+    // return round_up(size, 8);
+}
+
+int get_size_class(u64 size) {
+    for (int i = 0; i < MAX_SIZE_CLASS; i++) {
+        if (size <= size_classes[i]) {
+            return i;
+        }
+    }
+    return -1; // 大小过大
+
+    // 原来的实现，简洁但鲁棒性差
+    // if (size <= 8)
+    //     return 0;
+    // return 61 - __builtin_clzll(size - 1);
+}
 
 void kinit()
 {
     init_rc(&kalloc_page_cnt);
-
     init_spinlock(&free_pages_lock);
-    printk("kinit: acquiring free_pages_lock\n");
     acquire_spinlock(&free_pages_lock);
 
+    // 初始化allocator
     for (int i = 0; i < MAX_SIZE_CLASS; i++) {
         allocator.free_pages[i] = NULL;
         init_spinlock(&allocator.locks[i]);
     }
     
-    u64 start_addr = round_up(K2P((u64)end), PAGE_SIZE);
-    printk("kinit: Initializing Paged Allocator. Starting from physical address %p. Free pages: %llu\n", (void*)start_addr, (PHYSTOP - start_addr) / PAGE_SIZE);
-
+    // 初始化free_pages
+    u64 start_addr = round_up(K2P((u64)end), PAGE_SIZE); // 可分配物理页的起始地址
     for (u64 addr = start_addr; addr < PHYSTOP; addr += PAGE_SIZE) {
         Page* new_page = (Page*)addr;
-        // init_spinlock(&new_page->lock);
         new_page->free_list_num = 0;
         new_page->block_size = 0;
         new_page->free_list = NULL;
+        // 将新页插入到free_pages
         new_page->next = free_pages;
         free_pages = new_page;
     }
-    printk("kinit: releasing free_pages_lock\n");
-    release_spinlock(&free_pages_lock);
 
-    printk("Paged Allocator initialized.\n");
+    release_spinlock(&free_pages_lock);
+    return;
 }
 
 void kinit_page(Page* page, u64 block_size)
 {
-    u64 size_class = get_size_class(block_size);
-    // printk("kinit_page: acquiring lock for size class %llu\n", size_class);
-    // acquire_spinlock(&allocator.locks[size_class]);
+    // ERROR: 检查页是否为空
+    if (!page) {
+        printk("kinit_page: Attempted to initialize a NULL page.\n");
+        return;
+    }
 
-    page->free_list_num = (PAGE_SIZE - align_size(sizeof(Page))) / block_size;
-    printk("kinit_page: Initializing page %p with block size %llu. %u blocks.\n", page, block_size, page->free_list_num);
-    // printk("align_size(sizeof(Page)) = %llu\n", (u64)(sizeof(Page)));
+    u64 size_class = get_size_class(block_size);
+
+    page->free_list_num = (USABLE_PAGE_SIZE(block_size)) / block_size;
     page->block_size = block_size;
     page->free_list = NULL;
     page->next = NULL;
 
     // 初始化页内的自由块链表
-    char* block_ptr = (char*)round_up((u64)((char*)page + align_size(sizeof(Page))), block_size);
-    u64 num_blocks = (PAGE_SIZE - round_up(align_size(sizeof(Page)), block_size)) / block_size;
-    printk("kinit_page: block_ptr = %p, num_blocks = %llu, size_class = %llu\n", block_ptr, num_blocks, size_class);
-
-    for (u64 i = 0; i < num_blocks; i++) {
+    char* block_ptr = (char*)round_up((u64)((char*)page + sizeof(Page)), block_size);
+    for (int i = 0; i < page->free_list_num; i++) {
         *((void**)block_ptr) = page->free_list;
         page->free_list = block_ptr;
         block_ptr += block_size;
@@ -72,34 +95,25 @@ void kinit_page(Page* page, u64 block_size)
     // 将新页插入到对应大小类别的自由列表
     page->next = allocator.free_pages[size_class];
     allocator.free_pages[size_class] = page;
-
-    // printk("kinit_page: releasing lock for size class %llu\n", size_class);
-    // release_spinlock(&allocator.locks[size_class]);
-
-    printk("allocate_new_page: Allocated new page %p for size class %llu bytes with %llu blocks.\n",
-           page, block_size, num_blocks);
-
     return;
 }
 
 void *kalloc_page()
 {
     increment_rc(&kalloc_page_cnt);
-    // printk("kalloc_page: acquiring free_pages_lock\n");
     acquire_spinlock(&free_pages_lock);
 
+    // ERROR: 检查是否有空闲页
     if (free_pages == NULL) {
         printk("kalloc_page: Out of memory.\n");
         return NULL;
     }
     
+    // 取出一个空闲物理页
     Page* allocated_page = free_pages;
     free_pages = free_pages->next;
     allocated_page->next = NULL;
 
-    // printk("kalloc_page: Allocated page %p.\n", allocated_page);
-
-    // printk("kalloc_page: releasing free_pages_lock\n");
     release_spinlock(&free_pages_lock);
     return (void*)P2K(allocated_page);
 }
@@ -107,133 +121,121 @@ void *kalloc_page()
 void kfree_page(void *p)
 {
     decrement_rc(&kalloc_page_cnt);
-    // printk("kfree_page: acquiring free_pages_lock\n");
-
     acquire_spinlock(&free_pages_lock);
 
+    // ERROR: 检查释放的页是否合法
     if ((u64)p % PAGE_SIZE != 0) {
         printk("kfree_page: Attempted to free a non-page-aligned pointer.\n");
         return;
     }
 
+    // 将页插入到空闲页链表
     Page* page = (Page*)K2P((u64)p);
     page->next = free_pages;
     free_pages = page;
 
-    // printk("kfree_page: Freed page %p.\n", page);
-
-    // printk("kfree_page: releasing free_pages_lock\n");
     release_spinlock(&free_pages_lock);
     return;
 }
 
-u64 align_size(u64 size) {
-    // if (size <= 2)
-    //     return round_up(size, 2);
-    // else if (size <= 4)
-    //     return round_up(size, 4);
-    // else 
-        return round_up(size, 8);
-}
-
-int get_size_class(u64 x) {
-    return 61 - __builtin_clzll(x - 1);
-}
-
 void *kalloc(u64 size)
 {
+    // ERROR: 检查请求的大小是否合法
     if (size == 0 || size > PAGE_SIZE / 2) {
         printk("kalloc error: size error. Requested size: %llu.\n", size);
         return NULL;
     }
 
+    // 对齐请求的大小
     u64 aligned_size = align_size(size);
     int size_class = get_size_class(aligned_size);
-    aligned_size = size_classes[size_class];
-    printk("kalloc: Requested size: %llu. Aligned size: %llu. Size class: %d\n", size, aligned_size, size_class);
-    // printk("kalloc: acquiring lock for size class %d\n", size_class);
+
     acquire_spinlock(&allocator.locks[size_class]);
 
+    // ERROR: 没有合适的大小类别
     if (size_class == -1) {
         printk("kalloc: No suitable size class for size %llu.\n", aligned_size);
         return NULL;
     }
 
+    // 查找合适的空闲块
     Page* page = allocator.free_pages[size_class];
     void* block = NULL;
 
+    // 遍历所有页，查找空闲块
     while (page) {
-        // acquire_spinlock(&page->lock);
         if (page->free_list) {
             block = page->free_list;
             page->free_list = *((void**)page->free_list);
-            // release_spinlock(&page->lock);
             break;
         }
         page = page->next;
-        // release_spinlock(&page->lock);
     }
 
+    // 没有找到合适的空闲块，分配新的页
     if (!block) {
         page = kalloc_page();
-
+        // ERROR: 检查是否分配成功
         if (!page) {
-            // printk("kalloc: releasing lock for size class %d\n", size_class);
             release_spinlock(&allocator.locks[size_class]);
+            printk("kalloc: Out of memory.\n");
             return NULL;
         }
 
+        // 初始化新页
         kinit_page(page, aligned_size);
-        // acquire_spinlock(&page->lock);
         block = page->free_list;
         page->free_list = *((void**)page->free_list);
-        // release_spinlock(&page->lock);
-        // printk("kalloc: releasing lock for size class %d\n", size_class);
-        release_spinlock(&allocator.locks[size_class]);
-        return block;
     }
 
     page->free_list_num--;
-    // printk("kalloc: releasing lock for size class %d\n", size_class);
     release_spinlock(&allocator.locks[size_class]);
-
     return block;
 }
 
 void kfree(void *ptr)
 {
-    u64 paddr = K2P((u64)ptr);
-    u64 page_paddr = paddr & ~(PAGE_SIZE - 1);
-    void* page_virtual = (void*)P2K(page_paddr);
-    Page* page = (Page*)page_virtual;
+    u64 phys_addr = K2P((u64)ptr);
+    u64 page_phys_addr = phys_addr & ~(PAGE_SIZE - 1);
+
+    void* page_virt_addr = (void*)P2K(page_phys_addr);
+    Page* page = (Page*)page_virt_addr;
     u64 block_size = page->block_size;
     int size_class = get_size_class(block_size);
 
-    // printk("kfree: acquiring lock for size class %d\n", size_class);
     acquire_spinlock(&allocator.locks[size_class]);
 
+    // ERROR: 检查释放的指针是否合法
     if (!ptr) {
         printk("kfree: Attempted to free a NULL pointer.\n");
         return;
     }
-
-    // printk("kfree: Freeing block %p. Block size: %llu. Size class: %d\n", ptr, block_size, size_class);
-
-    // acquire_spinlock(&page->lock);
 
     *((void**)ptr) = page->free_list;
     page->free_list = ptr;
 
     page->free_list_num++;
 
-    if ((u64)page->free_list_num == (PAGE_SIZE - align_size(sizeof(Page))) / block_size) {
-        allocator.free_pages[size_class] = page->next;
-        // release_spinlock(&page->lock);
+    // 如果页内所有块都空闲，则释放该页
+    if ((u64)page->free_list_num == (USABLE_PAGE_SIZE(block_size)) / block_size) {
+        Page* prev = NULL;
+        Page* current = allocator.free_pages[size_class];
+        while (current) {
+            if (current == page) {
+                if (prev) {
+                    prev->next = current->next;
+                } else {
+                    allocator.free_pages[size_class] = current->next;
+                }
+                break;
+            }
+            prev = current;
+            current = current->next;
+        }
         kfree_page(page);
-        // return;
     }
-    // release_spinlock(&page->lock);
-    // printk("kfree: releasing lock for size class %d\n", size_class);
+
+
     release_spinlock(&allocator.locks[size_class]);
     return;
 }
