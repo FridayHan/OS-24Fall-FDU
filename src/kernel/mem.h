@@ -8,10 +8,10 @@
 #include <common/list.h>
 #include <common/string.h>
 
-#define MAX_SIZE_CLASS 24
+#define MAX_SIZE_CLASS 35
 #define USABLE_PAGE_SIZE(block_size) (PAGE_SIZE - round_up((u64)sizeof(Page), (u64)block_size))
 
-static const u16 size_classes[MAX_SIZE_CLASS] = {8, 12, 16, 24, 32, 48, 56, 64, 80, 96, 128, 160, 192, 256, 320, 384, 512, 768, 904, 1024, 1200, 1320, 1720, 2048};
+static const u16 size_classes[MAX_SIZE_CLASS] = {8, 12, 16, 24, 32, 40, 48, 56, 64, 80, 96, 128, 160, 192, 216, 232, 256, 320, 352, 384, 448, 512, 768, 904, 1024, 1200, 1320, 1520, 1640, 1720, 2048};
 
 extern char end[];
 
