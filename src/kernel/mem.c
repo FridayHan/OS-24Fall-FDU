@@ -57,7 +57,7 @@ void kinit()
         Page* new_page = (Page*)addr;
         new_page->free_list_num = 0;
         new_page->block_size = 0;
-        new_page->free_list = NULL;
+        new_page->free_list_offset = 0;
         // 将新页插入到free_pages
         new_page->next = free_pages;
         free_pages = new_page;
@@ -78,15 +78,15 @@ void kinit_page(Page* page, u16 block_size)
     int size_class = get_size_class(block_size);
     page->free_list_num = (USABLE_PAGE_SIZE(block_size)) / block_size;
     page->block_size = block_size;
-    page->free_list = NULL;
+    page->free_list_offset = 0;
     page->next = NULL;
 
     // 初始化页内的自由块链表
-    char* block_ptr = (char*)round_up((u64)((char*)page + sizeof(Page)), (u64)block_size);
+    u16 block_offset = (u16)round_up((u64)(sizeof(Page)), (u64)block_size);
     for (int i = 0; i < page->free_list_num; i++) {
-        *((void**)block_ptr) = page->free_list;
-        page->free_list = block_ptr;
-        block_ptr += block_size;
+        *(u16*)((char*)page + block_offset) = page->free_list_offset;
+        page->free_list_offset = (u16)block_offset;
+        block_offset += block_size;
     }
     
     // 将新页插入到对应大小类别的自由列表
@@ -157,20 +157,20 @@ void *kalloc(u16 size)
 
     // 查找合适的空闲块
     Page* page = allocator.free_pages[size_class];
-    void* block = NULL;
+    u16 block_offset = 0;
 
     // 遍历所有页，查找空闲块
     while (page) {
-        if (page->free_list) {
-            block = page->free_list;
-            page->free_list = *((void**)page->free_list);
+        if (page->free_list_offset) {
+            block_offset = page->free_list_offset;
+            page->free_list_offset = *(u16*)((char*)page + page->free_list_offset);
             break;
         }
         page = page->next;
     }
 
     // 没有找到合适的空闲块，分配新的页
-    if (!block) {
+    if (!block_offset) {
         page = kalloc_page();
         // ERROR: 检查是否分配成功
         if (!page) {
@@ -181,13 +181,13 @@ void *kalloc(u16 size)
 
         // 初始化新页
         kinit_page(page, aligned_size);
-        block = page->free_list;
-        page->free_list = *((void**)page->free_list);
+        block_offset = page->free_list_offset;
+        page->free_list_offset = *(u16*)((char*)page + page->free_list_offset);
     }
 
     page->free_list_num--;
     release_spinlock(&allocator.locks[size_class]);
-    return block;
+    return (Page*)((char*)page + block_offset);
 }
 
 void kfree(void *ptr)
@@ -208,8 +208,8 @@ void kfree(void *ptr)
         return;
     }
 
-    *((void**)ptr) = page->free_list;
-    page->free_list = ptr;
+    *((u16*)ptr) = page->free_list_offset;
+    page->free_list_offset = (u16)(ptr - page_virt_addr);
 
     page->free_list_num++;
 
