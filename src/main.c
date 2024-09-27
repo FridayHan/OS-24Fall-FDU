@@ -9,13 +9,14 @@ static volatile bool boot_secondary_cpus = false;
 
 void main() {
     if (cpuid() == 0) {
-        /* @todo: Clear BSS section.*/
         extern char edata[], end[];
         memset(edata, 0, (usize)(end - edata));
 
         smp_init();
         uart_init();
         printk_init();
+
+        printk("Hello, world! (Core 0)\n");
 
         /* initialize kernel memory allocator */
         kinit();
@@ -27,6 +28,7 @@ void main() {
     } else {
         while (!boot_secondary_cpus);
         arch_fence();
+        printk("Hello, world! (Core %lld)\n", cpuid());
     }
 
     set_return_addr(idle_entry);
