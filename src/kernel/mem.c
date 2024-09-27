@@ -90,8 +90,13 @@ void kinit_page(Page* page, u16 block_size)
     }
     
     // 将新页插入到对应大小类别的自由列表
+    page->prev = NULL;
     page->next = allocator.free_pages[size_class];
+    if (allocator.free_pages[size_class]) {
+        allocator.free_pages[size_class]->prev = page;
+    }
     allocator.free_pages[size_class] = page;
+    page->in_free_list = true;
     return;
 }
 
@@ -157,20 +162,8 @@ void *kalloc(u16 size)
 
     // 查找合适的空闲块
     Page* page = allocator.free_pages[size_class];
-    u16 block_offset = 0;
 
-    // 遍历所有页，查找空闲块
-    while (page) {
-        if (page->free_list_offset) {
-            block_offset = page->free_list_offset;
-            page->free_list_offset = *(u16*)((char*)page + page->free_list_offset);
-            break;
-        }
-        page = page->next;
-    }
-
-    // 没有找到合适的空闲块，分配新的页
-    if (!block_offset) {
+    if (!page) {
         page = kalloc_page();
         // ERROR: 检查是否分配成功
         if (!page) {
@@ -178,20 +171,39 @@ void *kalloc(u16 size)
             printk("kalloc: Out of memory.\n");
             return NULL;
         }
-
-        // 初始化新页
         kinit_page(page, aligned_size);
-        block_offset = page->free_list_offset;
-        page->free_list_offset = *(u16*)((char*)page + page->free_list_offset);
     }
 
+    u16 block_offset = page->free_list_offset;
+    page->free_list_offset = *(u16*)((char*)page + block_offset);
     page->free_list_num--;
+
+    if (page->free_list_num == 0) {
+        if (page->prev) {
+            page->prev->next = page->next;
+        } else {
+            allocator.free_pages[size_class] = page->next;
+        }
+        if (page->next) {
+            page->next->prev = page->prev;
+        }
+        page->in_free_list = false;
+        page->next = NULL;
+        page->prev = NULL;
+    }
+
     release_spinlock(&allocator.locks[size_class]);
     return (Page*)((char*)page + block_offset);
 }
 
 void kfree(void *ptr)
 {
+    // ERROR: 检查释放的指针是否合法
+    if (!ptr) {
+        printk("kfree: Attempted to free a NULL pointer.\n");
+        return;
+    }
+
     u64 phys_addr = K2P((u64)ptr);
     u64 page_phys_addr = phys_addr & ~(PAGE_SIZE - 1);
 
@@ -200,35 +212,46 @@ void kfree(void *ptr)
     u16 block_size = page->block_size;
     int size_class = get_size_class(block_size);
 
-    acquire_spinlock(&allocator.locks[size_class]);
-
-    // ERROR: 检查释放的指针是否合法
-    if (!ptr) {
-        printk("kfree: Attempted to free a NULL pointer.\n");
+    // ERROR: 检查释放的块是否合法
+    if (size_class == -1) {
+        printk("kfree: Invalid block size %u.\n", block_size);
         return;
     }
 
-    *((u16*)ptr) = page->free_list_offset;
-    page->free_list_offset = (u16)(ptr - page_virt_addr);
+    acquire_spinlock(&allocator.locks[size_class]);
 
+    bool was_full = (page->free_list_num == 0);
+
+    *(u16*)ptr = page->free_list_offset;
+    page->free_list_offset = (u16)((char*)ptr - (char*)page);
     page->free_list_num++;
 
-    // 如果页内所有块都空闲，则释放该页
-    if ((u64)page->free_list_num == (USABLE_PAGE_SIZE(block_size)) / block_size) {
-        Page* prev = NULL;
-        Page* current = allocator.free_pages[size_class];
-        while (current) {
-            if (current == page) {
-                if (prev) {
-                    prev->next = current->next;
-                } else {
-                    allocator.free_pages[size_class] = current->next;
-                }
-                break;
-            }
-            prev = current;
-            current = current->next;
+    // 若页变free，则插入到allocator.free_pages
+    if (was_full) {
+        page->next = allocator.free_pages[size_class];
+        page->prev = NULL;
+        if (allocator.free_pages[size_class]) {
+            allocator.free_pages[size_class]->prev = page;
         }
+        allocator.free_pages[size_class] = page;
+        page->in_free_list = true;
+    }
+
+    // 若页已完全free，释放页
+    if ((u64)page->free_list_num == (USABLE_PAGE_SIZE(block_size)) / block_size) {
+        if (page->in_free_list) {
+            if (page->prev) {
+                page->prev->next = page->next;
+            } else {
+                allocator.free_pages[size_class] = page->next;
+            }
+            if (page->next) {
+                page->next->prev = page->prev;
+            }
+            page->in_free_list = false;
+        }
+        page->next = NULL;
+        page->prev = NULL;
         kfree_page(page);
     }
 
