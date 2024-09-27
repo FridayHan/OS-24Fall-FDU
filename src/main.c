@@ -14,11 +14,11 @@ void main()
         // printk("edata is %p; end is %p\n", (void*)edata, (void*)end);
         memset(edata, 0, end - edata);
         printk("BSS section cleared.\n");
-        for (char *addr = edata; addr != end; addr++)
-        {
-            printk("%d", *addr);
-        }
-        printk("\n");
+        // for (char *addr = edata; addr != end; addr++)
+        // {
+        //     printk("%d", *addr);
+        // }
+        // printk("\n");
         
         smp_init();
         uart_init();
