@@ -55,6 +55,7 @@ void main()
         printk("Hello, world! (Core %lld)\n", cpuid());
         timer_init_percpu();
         gicv3_init_percpu();
+        // printk("done");
     }
 
     set_return_addr(idle_entry);

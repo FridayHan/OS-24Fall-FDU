@@ -11,6 +11,7 @@ NO_RETURN void idle_entry()
     set_cpu_on();
     while (1) {
         yield();
+        printk("aaa");
         if (panic_flag)
             break;
         arch_with_trap

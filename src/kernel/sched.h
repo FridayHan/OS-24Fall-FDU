@@ -1,6 +1,7 @@
 #pragma once
 
 #include <kernel/proc.h>
+#include <kernel/printk.h>
 
 void init_sched();
 void init_schinfo(struct schinfo *);
@@ -12,6 +13,6 @@ void release_sched_lock();
 void sched(enum procstate new_state);
 
 // MUST call lock_for_sched() before sched() !!!
-#define yield() (acquire_sched_lock(), sched(RUNNABLE))
+#define yield() (printk("yield\n"),acquire_sched_lock(), sched(RUNNABLE))
 
 Proc *thisproc();
