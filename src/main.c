@@ -52,7 +52,7 @@ void main()
         while (!boot_secondary_cpus)
             ;
         arch_fence();
-        printk("Hello, world! (Core %lld)\n", cpuid());
+        // printk("Hello, world! (Core %lld)\n", cpuid());
         timer_init_percpu();
         gicv3_init_percpu();
     }

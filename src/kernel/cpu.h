@@ -7,6 +7,8 @@
 
 struct sched {
     // TODO: customize your sched info
+    struct Proc *current_proc;
+    Proc *idle_proc;
 };
 
 struct cpu {
