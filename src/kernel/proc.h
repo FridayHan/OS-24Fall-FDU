@@ -39,7 +39,7 @@ struct schinfo {
     ListNode sched_node;
 };
 
-// SpinLock proc_lock;
+extern SpinLock proc_lock;
 
 typedef struct Proc {
     bool killed;

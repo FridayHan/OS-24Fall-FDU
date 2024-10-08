@@ -25,7 +25,7 @@ void main()
         uart_init();
         printk_init();
 
-        printk("Hello, world! (Core 0)\n");
+        // printk("Hello, world! (Core 0)\n");
 
         gicv3_init();
         gicv3_init_percpu();
@@ -52,7 +52,7 @@ void main()
         while (!boot_secondary_cpus)
             ;
         arch_fence();
-        // printk("Hello, world! (Core %lld)\n", cpuid());
+        printk("Hello, world! (Core %lld)\n", cpuid());
         timer_init_percpu();
         gicv3_init_percpu();
     }
