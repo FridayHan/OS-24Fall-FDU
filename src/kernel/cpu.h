@@ -7,7 +7,7 @@
 
 struct sched {
     // TODO: customize your sched info
-    struct Proc *current_proc;
+    Proc *thisproc;
     Proc *idle_proc;
 };
 

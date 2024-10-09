@@ -20,16 +20,24 @@ void init_sched()
     // 1. initialize the resources (e.g. locks, semaphores)
     // 2. initialize the scheduler info of each CPU
 
+    printk("-------------------------------------------------------\n");
     printk("Initializing scheduler...\n");
 
     init_spinlock(&sched_lock);
-    init_list_node(&run_queue);
+
+    // 创建idle进程
+    for (int i = 0; i < NCPU; i++) {
+        Proc *p = kalloc(sizeof(Proc));
+        p->idle = 1;
+        p->state = RUNNING;
+        cpus[i].sched.idle_proc = cpus[i].sched.thisproc = p;
+    }
 }
 
 Proc *thisproc()
 {
     // TODO: return the current process
-    Proc *p = cpus[cpuid()].sched.current_proc;
+    Proc *p = cpus[cpuid()].sched.thisproc;
     // printk("Current process on CPU %lld: PID %d, state %d\n", cpuid(), p->pid, p->state);
     return p;
 }
@@ -38,7 +46,7 @@ void init_schinfo(struct schinfo *p)
 {
     // TODO: initialize your customized schinfo for every newly-created process
 
-    // printk("Initializing schinfo for process at address: %p\n", p);
+    printk("Initializing schinfo for process with PID %d\n", container_of(p, Proc, schinfo)->pid);
     init_list_node(&p->sched_node);
     // printk("Initialized sched_node: next = %p, prev = %p\n", p->sched_node.next, p->sched_node.prev);
     // init_spinlock(&p->lock)
@@ -69,7 +77,6 @@ bool is_zombie(Proc *p)
     printk("is_zombie acquiring\n");
     acquire_sched_lock();
     r = p->state == ZOMBIE;
-    // printk("Process PID %d is %s ZOMBIE\n", p->pid, r ? "" : "not");
     release_sched_lock();
     return r;
 }
@@ -85,24 +92,22 @@ bool activate_proc(Proc *p)
 
     printk("activate_proc acquiring\n");
     acquire_sched_lock();
-    cpus[cpuid()].sched.current_proc = p;
+    cpus[cpuid()].sched.thisproc = p;
     if (p->state == RUNNING || p->state == RUNNABLE) {
-        // printk("Process PID %d is already RUNNING or RUNNABLE\n", p->pid);
+        printk("Process PID %d is already RUNNING or RUNNABLE\n", p->pid);
         release_sched_lock();
-        return true;
+        return false;
     } else if (p->state == SLEEPING || p->state == UNUSED) {
         p->state = RUNNABLE;
-        // printk("Process PID %d state changed to RUNNABLE\n", p->pid);
-        _merge_list(&run_queue, &p->schinfo.sched_node);
-        // printk("Process PID %d added to run queue\n", p->pid);
-        release_sched_lock();
-        return true;
+        printk("Process PID %d state changed to RUNNABLE\n", p->pid);
+        _insert_into_list(&run_queue, &p->schinfo.sched_node);
+        printk("Process PID %d added to run queue\n", p->pid);
     } else {
         printk("PANIC: Unexpected process state for PID %d\n", p->pid);
         PANIC();
-        release_sched_lock();
-        return false;
     }
+    release_sched_lock();
+    return true;
 }
 
 static void update_this_state(enum procstate new_state)
@@ -110,13 +115,10 @@ static void update_this_state(enum procstate new_state)
     // TODO: if you use template sched function, you should implement this routinue
     // update the state of current process to new_state, and not [remove it from the sched queue if
     // new_state=SLEEPING/ZOMBIE]
-
-    Proc *p = thisproc();
-    // printk("Updating state of process PID %d from %d to %d\n", p->pid, p->state, new_state);
-    p->state = new_state;
+    
+    thisproc()->state = new_state;
     if (new_state == SLEEPING || new_state == ZOMBIE) {
-        _detach_from_list(&p->schinfo.sched_node);
-        // printk("Process PID %d removed from run queue due to state change\n", p->pid);
+        _detach_from_list(&thisproc()->schinfo.sched_node);
     }
 }
 
@@ -125,19 +127,18 @@ static Proc *pick_next()
     // TODO: if using template sched function, you should implement this routinue
     // choose the next process to run, and return idle if no runnable process
 
-    printk("Picking next process to run...\n");
-    if (!_empty_list(&run_queue)) {
-        ListNode *node = run_queue.next;
-        Proc *p = container_of(node, Proc, schinfo.sched_node);
-        // Remove from run_queue
-        _detach_from_list(&p->schinfo.sched_node);
-        cpus[cpuid()].sched.current_proc = p;
-        // printk("Next process to run: PID %d\n", p->pid);
-        return p;
-    } else {
-        printk("No runnable process found, returning idle process\n");
-        return cpus[cpuid()].sched.idle_proc;
+    // printk("Picking next process to run...\n");
+    _for_in_list(p, &run_queue) {
+        if (p == &run_queue) 
+            continue;
+        auto proc = container_of(p, Proc, schinfo.sched_node);
+        // _detach_from_list(&proc->schinfo.sched_node); // ?????
+        if (proc->state == RUNNABLE) {
+            // printk("Next process to run: PID %d\n", proc->pid);
+            return proc;
+        }
     }
+    return cpus[cpuid()].sched.idle_proc;
 }
 
 static void update_this_proc(Proc *p)
@@ -146,7 +147,7 @@ static void update_this_proc(Proc *p)
     // update thisproc to the choosen process
 
     // printk("Updating current process on CPU %lld to PID %d\n", cpuid(), p->pid);
-    cpus[cpuid()].sched.current_proc = p;
+    cpus[cpuid()].sched.thisproc = p;
 }
 
 // A simple scheduler.
@@ -155,10 +156,6 @@ static void update_this_proc(Proc *p)
 void sched(enum procstate new_state)
 {
     auto this = thisproc();
-    printk("--------------------------------\n");
-    if (this == NULL) {
-        printk("NULL\n");
-    }
     // if (this->state == RUNNING) {
     //     printk("STATE:RUNNING\n");
     // } else if (this->state == RUNNABLE) {
@@ -178,7 +175,6 @@ void sched(enum procstate new_state)
     ASSERT(next->state == RUNNABLE);
     next->state = RUNNING;
     if (next != this) {
-        // printk("Switching context from PID %d to PID %d\n", this->pid, next->pid);
         swtch(next->kcontext, &this->kcontext);
     }
     release_sched_lock();

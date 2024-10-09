@@ -1,4 +1,5 @@
 #include <common/list.h>
+#include <kernel/printk.h>
 
 void init_list_node(ListNode *node)
 {
@@ -22,6 +23,8 @@ ListNode *_merge_list(ListNode *node1, ListNode *node2)
     //                   |  |
     //   ... <-- node2 <-+  +-- node4 <-- ...
 
+    printk("node1->next: %p\n", node1->next);
+    printk("node2->prev: %p\n", node2->prev);
     ListNode *node3 = node1->next;
     ListNode *node4 = node2->prev;
 

@@ -46,7 +46,6 @@ void init_proc(Proc *p)
     memset(p, 0, sizeof(Proc));
     p->pid = nextpid++;
     // printk("Assigned PID: %d\n", p->pid);
-    release_sched_lock();
 
     p->kstack = kalloc(KSTACK_SIZE);
     if (!p->kstack) {
@@ -75,10 +74,11 @@ void init_proc(Proc *p)
     init_sem(&p->childexit, 0);
     init_list_node(&p->children);
     init_list_node(&p->ptnode);
-    init_sched();
+    // init_sched();
     init_schinfo(&p->schinfo);
 
-    // printk("Process initialized with PID: %d\n", p->pid);
+    printk("Process initialized with PID: %d\n", p->pid);
+    release_sched_lock();
 }
 
 Proc *create_proc()
@@ -113,7 +113,6 @@ int start_proc(Proc *p, void (*entry)(u64), u64 arg)
     
     // printk("Starting process with PID: %d\n", p->pid);
 
-    
     if (p->parent == NULL) {
         set_parent_to_this(p);
         // printk("Parent set to current process. Parent PID: %d\n", p->parent->pid);
@@ -133,7 +132,8 @@ int start_proc(Proc *p, void (*entry)(u64), u64 arg)
 
     // printk("Kernel context set for process with PID: %d, entry: %p, arg: %llu\n", p->pid, entry, arg);
 
-    activate_proc(p);
+    p->state = RUNNABLE;
+
     // printk("Process activated. PID: %d\n", p->pid);
 
     return p->pid;

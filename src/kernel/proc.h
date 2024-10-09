@@ -33,10 +33,26 @@ typedef struct KernelContext {
     u64 lr;
 } KernelContext;
 
+// typedef struct UserContext {
+//     // TODO: customize your trap frame
+//     u64 spsr, elr;
+//     u64 x[18]; // x0-x18
+// } UserContext;
+
+// typedef struct KernelContext {
+//     // TODO: customize your context
+//     u64 lr, x0, x1;
+//     u64 x[11]; // x19-x29
+// } KernelContext;
+
 // embeded data for procs
 struct schinfo {
     // TODO: customize your sched info
-    ListNode sched_node;
+    ListNode sched_node;    // 调度队列节点
+    int priority;           // 进程优先级
+    int cpu_affinity;       // CPU亲和性（-1表示任何CPU）
+    u64 time_slice;         // 剩余时间片
+    bool in_ready_queue;    // 是否在就绪队列中
 };
 
 extern SpinLock proc_lock;
