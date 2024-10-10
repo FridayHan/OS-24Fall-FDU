@@ -14,7 +14,6 @@ NO_RETURN void idle_entry()
         yield();
         if (panic_flag)
             break;
-        printk("vshieourbfjkvuhjrwbvhioualwjknedhfvfhiulejqwdkbfhvliujknfwbekvvhioujln\n");
         arch_with_trap
         {
             arch_wfi();

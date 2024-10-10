@@ -22,7 +22,7 @@ void init_kproc()
     // 1. init global resources (e.g. locks, semaphores)
     // 2. init the root_proc (finished)
 
-    printk("Initializing kernel process...\n");
+    // printk("Initializing kernel process...\n");
 
     // init_spinlock(&proc_lock);
     init_proc(&root_proc);
@@ -40,7 +40,7 @@ void init_proc(Proc *p)
     // NOTE: be careful of concurrency
     // printk("Initializing process...\n");
 
-    printk("init_proc acquiring\n");
+    // printk("init_proc acquiring\n");
     memset(p, 0, sizeof(Proc));
     // printk("Assigned PID: %d\n", p->pid);
 
@@ -52,26 +52,23 @@ void init_proc(Proc *p)
     p->state = UNUSED;
     p->parent = NULL;
     p->exitcode = 0; // ???
+    p->schinfo.in_run_queue = false;
 
     init_sem(&p->childexit, 0);
     init_list_node(&p->children);
     init_list_node(&p->ptnode);
-    // init_sched();
     init_schinfo(&p->schinfo);
 
     p->kstack = kalloc(KSTACK_SIZE);
     if (!p->kstack) {
         PANIC();
     }
-    // printk("Kernel stack allocated: %p\n", p->kstack);
 
     p->kcontext = (KernelContext *)(p->kstack + KSTACK_SIZE - sizeof(KernelContext) - sizeof(UserContext));
-    // printk("Kernel context allocated: %p\n", p->kcontext);
 
     p->ucontext = (UserContext *)(p->kstack + KSTACK_SIZE - sizeof(UserContext));
-    // printk("User context allocated: %p\n", p->ucontext);
 
-    printk("Process initialized with PID: %d\n", p->pid);
+    // printk("Process initialized with PID: %d\n", p->pid);
 }
 
 Proc *create_proc()
@@ -88,7 +85,7 @@ void set_parent_to_this(Proc *proc)
     // NOTE: maybe you need to lock the process tree
     // NOTE: it's ensured that the old proc->parent = NULL
 
-    printk("set_parent_to_this acquiring\n");
+    // printk("set_parent_to_this acquiring\n");
     acquire_sched_lock();
     proc->parent = thisproc();
     _insert_into_list(&thisproc()->children, &proc->ptnode);
@@ -108,6 +105,7 @@ int start_proc(Proc *p, void (*entry)(u64), u64 arg)
         acquire_sched_lock();
         p->parent = &root_proc;
         _insert_into_list(&root_proc.children, &p->ptnode);
+        printk("Parent: %d, Child: %d\n", 0, p->pid);
         release_sched_lock();
     }
 
@@ -115,13 +113,13 @@ int start_proc(Proc *p, void (*entry)(u64), u64 arg)
     p->kcontext->x0 = (u64)entry;
     p->kcontext->x1 = arg;
 
-    printk("proc_entry: %p\n", proc_entry);
-    printk("entry: %p\n", entry);
-    printk("arg: %llu\n", arg);
+    // printk("proc_entry: %p\n", proc_entry);
+    // printk("entry: %p\n", entry);
+    // printk("arg: %llu\n", arg);
 
-    printk("p->kcontext->lr: %llx\n", p->kcontext->lr);
-    printk("p->kcontext->x0: %llx\n", p->kcontext->x0);
-    printk("p->kcontext->x1: %llx\n", p->kcontext->x1);
+    // printk("p->kcontext->lr: %llx\n", p->kcontext->lr);
+    // printk("p->kcontext->x0: %llx\n", p->kcontext->x0);
+    // printk("p->kcontext->x1: %llx\n", p->kcontext->x1);
 
 
 
@@ -153,12 +151,18 @@ int wait(int *exitcode)
     acquire_sched_lock();
     if (_empty_list(&p->children)) {
         release_sched_lock();
-        // printk("No children for process with PID: %d\n", p->pid);
+        printk("BOMB\n");
         return -1;
     }
+
     while (1) {
+        printk("current process: %d\n", p->pid);
         _for_in_list(node, &p->children) {
+            if (node == &p->children) {
+                continue;
+            }
             Proc *cp = container_of(node, Proc, ptnode);
+            printk("child process: %d\n", cp->pid);
             if (cp->state == ZOMBIE) {
                 int pid = cp->pid;
                 if (exitcode) {
@@ -189,6 +193,7 @@ NO_RETURN void exit(int code)
 
     Proc *p = thisproc();
     p->exitcode = code;
+    printk("exit acquiring\n");
     acquire_sched_lock();
 
     _for_in_list(node, &p->children) {
@@ -207,11 +212,13 @@ NO_RETURN void exit(int code)
         }
     }
 
-    post_sem(&p->parent->childexit);
-    p->state = ZOMBIE;
-    sched(ZOMBIE);
-
     release_sched_lock();
+
+    printk("exit thisproc->pid: %d\n", thisproc()->pid);
+    post_sem(&p->parent->childexit);
+    // p->state = ZOMBIE;
+    acquire_sched_lock();
+    sched(ZOMBIE);
 
     PANIC(); // prevent the warning of 'no_return function returns'
 }

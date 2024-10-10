@@ -16,11 +16,9 @@ swtch:
 // pushp(x23, x24)
 // pushp(x21, x22)
 // pushp(x19, x20)
-// 
 // mov x2, sp
 // str x2, [x1]
 // mov sp, x0
-// 
 // popp(x19, x20)
 // popp(x21, x22)
 // popp(x23, x24)

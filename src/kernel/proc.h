@@ -49,10 +49,10 @@ typedef struct KernelContext {
 struct schinfo {
     // TODO: customize your sched info
     ListNode sched_node;    // 调度队列节点
-    int priority;           // 进程优先级
-    int cpu_affinity;       // CPU亲和性（-1表示任何CPU）
-    u64 time_slice;         // 剩余时间片
-    bool in_ready_queue;    // 是否在就绪队列中
+    // int priority;           // 进程优先级
+    // int cpu_affinity;       // CPU亲和性（-1表示任何CPU）
+    // u64 time_slice;         // 剩余时间片
+    bool in_run_queue;    // 是否在就绪队列中
 };
 
 // extern SpinLock proc_lock;
