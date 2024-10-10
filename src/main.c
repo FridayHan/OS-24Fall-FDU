@@ -36,11 +36,11 @@ void main()
         /* initialize kernel memory allocator */
         kinit();
 
-        /* initialize kernel proc */
-        init_kproc();
-
         /* initialize sched */
         init_sched();
+
+        /* initialize kernel proc */
+        init_kproc();
 
         smp_init();
 
@@ -54,7 +54,6 @@ void main()
         arch_fence();
         timer_init_percpu();
         gicv3_init_percpu();
-        printk("done\n");
     }
 
     set_return_addr(idle_entry);

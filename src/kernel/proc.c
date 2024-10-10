@@ -26,6 +26,7 @@ void init_kproc()
 
     // init_spinlock(&proc_lock);
     init_proc(&root_proc);
+    root_proc.state = RUNNING;
     root_proc.parent = &root_proc;
     start_proc(&root_proc, kernel_entry, 123456);
 }

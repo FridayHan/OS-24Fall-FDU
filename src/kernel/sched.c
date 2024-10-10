@@ -24,7 +24,7 @@ void init_sched()
     printk("Initializing scheduler...\n");
 
     init_spinlock(&sched_lock);
-    // init_list_node(&run_queue);
+    init_list_node(&run_queue);
 
     // 创建idle进程
     for (int i = 0; i < NCPU; i++) {
@@ -93,9 +93,6 @@ bool activate_proc(Proc *p)
 
     printk("activate_proc acquiring\n");
     acquire_sched_lock();
-    if (p->pid == 0) {
-        init_list_node(&run_queue);
-    }
     cpus[cpuid()].sched.thisproc = p;
     if (p->state == RUNNING || p->state == RUNNABLE) {
         printk("Process PID %d is already RUNNING or RUNNABLE\n", p->pid);
@@ -121,6 +118,9 @@ static void update_this_state(enum procstate new_state)
     // new_state=SLEEPING/ZOMBIE]
     
     thisproc()->state = new_state;
+    if (new_state == SLEEPING || new_state == ZOMBIE || new_state == RUNNABLE) {
+        cpus[cpuid()].sched.thisproc = NULL;
+    }
     if (new_state == SLEEPING || new_state == ZOMBIE) {
         _detach_from_list(&thisproc()->schinfo.sched_node);
     }
@@ -175,14 +175,16 @@ void sched(enum procstate new_state)
     }
         printk("p->pid: %d\n", this->pid);
     printk("Scheduling on CPU %lld, current process PID %d, new state: %d\n", cpuid(), this->pid, new_state); 
+    printk("this->state: %d\n", this->state);
     ASSERT(this->state == RUNNING);
     update_this_state(new_state);
     auto next = pick_next();
     update_this_proc(next);
+    printk("next->state: %d\n", next->state);
     ASSERT(next->state == RUNNABLE);
     next->state = RUNNING;
-    printk("Next process to run: PID %d\n", next->pid);
-    printk("p->kcontext->lr: %llx\n", next->kcontext->lr);
+    // printk("Next process to run: PID %d\n", next->pid);
+    // printk("p->kcontext->lr: %llx\n", next->kcontext->lr);
     if (next != this) {
         swtch(next->kcontext, &this->kcontext);
     }
