@@ -8,7 +8,8 @@
 #include <fs/defines.h>
 
 Proc root_proc;
-SpinLock proc_lock;
+// SpinLock proc_lock;
+static int pid;
 
 void kernel_entry();
 void proc_entry();
@@ -21,15 +22,12 @@ void init_kproc()
     // 1. init global resources (e.g. locks, semaphores)
     // 2. init the root_proc (finished)
 
-    // printk("Initializing kernel process...\n");
+    printk("Initializing kernel process...\n");
 
     // init_spinlock(&proc_lock);
     init_proc(&root_proc);
     root_proc.parent = &root_proc;
-    // printk("Root process initialized. PID: %d\n", root_proc.pid);
-
     start_proc(&root_proc, kernel_entry, 123456);
-    // printk("Kernel process started. Entry: %p\n", kernel_entry);
 }
 
 void init_proc(Proc *p)
@@ -39,37 +37,18 @@ void init_proc(Proc *p)
     // NOTE: be careful of concurrency
     // printk("Initializing process...\n");
 
-    static int nextpid = 1;
-
     printk("init_proc acquiring\n");
-    acquire_sched_lock();
     memset(p, 0, sizeof(Proc));
-    p->pid = nextpid++;
     // printk("Assigned PID: %d\n", p->pid);
 
-    p->kstack = kalloc(KSTACK_SIZE);
-    if (!p->kstack) {
-        PANIC();
-    }
-    // printk("Kernel stack allocated: %p\n", p->kstack);
-
-    p->ucontext = kalloc(sizeof(UserContext));
-    if (!p->ucontext) {
-        PANIC();
-    }
-    // printk("User context allocated: %p\n", p->ucontext);
-
-    p->kcontext = kalloc(sizeof(KernelContext));
-    if (!p->kcontext) {
-        PANIC();
-    }
-    // printk("Kernel context allocated: %p\n", p->kcontext);
-
-    p->state = UNUSED;
-    p->parent = NULL;
     p->killed = false;
     p->idle = false;
-    p->exitcode = 0;
+    acquire_sched_lock();
+    p->pid = pid++;
+    release_sched_lock();
+    p->state = UNUSED;
+    p->parent = NULL;
+    p->exitcode = 0; // ???
 
     init_sem(&p->childexit, 0);
     init_list_node(&p->children);
@@ -77,8 +56,19 @@ void init_proc(Proc *p)
     // init_sched();
     init_schinfo(&p->schinfo);
 
+    p->kstack = kalloc(KSTACK_SIZE);
+    if (!p->kstack) {
+        PANIC();
+    }
+    // printk("Kernel stack allocated: %p\n", p->kstack);
+
+    p->kcontext = (KernelContext *)(p->kstack + KSTACK_SIZE - sizeof(KernelContext) - sizeof(UserContext));
+    // printk("Kernel context allocated: %p\n", p->kcontext);
+
+    p->ucontext = (UserContext *)(p->kstack + KSTACK_SIZE - sizeof(UserContext));
+    // printk("User context allocated: %p\n", p->ucontext);
+
     printk("Process initialized with PID: %d\n", p->pid);
-    release_sched_lock();
 }
 
 Proc *create_proc()
@@ -86,7 +76,6 @@ Proc *create_proc()
     // printk("Creating new process...\n");
     Proc *p = kalloc(sizeof(Proc));
     init_proc(p);
-    // printk("Process created with PID: %d\n", p->pid);
     return p;
 }
 
@@ -99,7 +88,7 @@ void set_parent_to_this(Proc *proc)
     printk("set_parent_to_this acquiring\n");
     acquire_sched_lock();
     proc->parent = thisproc();
-    _insert_into_list(&proc->parent->children, &proc->ptnode);
+    _insert_into_list(&thisproc()->children, &proc->ptnode);
     release_sched_lock();
 }
 
@@ -112,31 +101,39 @@ int start_proc(Proc *p, void (*entry)(u64), u64 arg)
     // NOTE: be careful of concurrency
     
     // printk("Starting process with PID: %d\n", p->pid);
-
     if (p->parent == NULL) {
-        set_parent_to_this(p);
-        // printk("Parent set to current process. Parent PID: %d\n", p->parent->pid);
+        acquire_sched_lock();
+        p->parent = &root_proc;
+        _insert_into_list(&root_proc.children, &p->ptnode);
+        release_sched_lock();
     }
 
-    memset(p->kcontext, 0, sizeof(KernelContext));
+    p->kcontext->lr = (u64)proc_entry;  
+    p->kcontext->x0 = (u64)entry;
+    p->kcontext->x1 = arg;
 
-    // Set sp to the top of the kernel stack
-    p->kcontext->sp = (u64)p->kstack + KSTACK_SIZE;
+    printk("proc_entry: %p\n", proc_entry);
+    printk("entry: %p\n", entry);
+    printk("arg: %llu\n", arg);
 
-    // Set lr to proc_entry
-    p->kcontext->lr = (u64)proc_entry;
+    printk("p->kcontext->lr: %llx\n", p->kcontext->lr);
+    printk("p->kcontext->x0: %llx\n", p->kcontext->x0);
+    printk("p->kcontext->x1: %llx\n", p->kcontext->x1);
 
-    // Set x19 and x20 to entry and arg
-    p->kcontext->x19 = (u64)entry;
-    p->kcontext->x20 = arg;
 
-    // printk("Kernel context set for process with PID: %d, entry: %p, arg: %llu\n", p->pid, entry, arg);
 
-    p->state = RUNNABLE;
+    // // Set sp to the top of the kernel stack
+    // p->kcontext->sp = (u64)p->kstack + KSTACK_SIZE;
 
-    // printk("Process activated. PID: %d\n", p->pid);
+    // // Set x19 and x20 to entry and arg
+    // p->kcontext->x19 = (u64)entry;
+    // p->kcontext->x20 = arg;
 
-    return p->pid;
+
+    int id = p->pid;
+    activate_proc(p);
+
+    return id;
 }
 
 int wait(int *exitcode)
@@ -148,7 +145,6 @@ int wait(int *exitcode)
     // NOTE: be careful of concurrency
 
     Proc *p = thisproc();
-    // printk("Waiting for child process. Parent PID: %d\n", p->pid);
 
     printk("wait acquiring\n");
     acquire_sched_lock();
@@ -158,33 +154,24 @@ int wait(int *exitcode)
         return -1;
     }
     while (1) {
-        // Check for any zombie child
-        // ListNode *node;
         _for_in_list(node, &p->children) {
             Proc *cp = container_of(node, Proc, ptnode);
             if (cp->state == ZOMBIE) {
-                // Found a zombie child
                 int pid = cp->pid;
                 if (exitcode) {
                     *exitcode = cp->exitcode;
                 }
-                // Remove from children list
                 _detach_from_list(&cp->ptnode);
-                // Free child's resources
                 kfree(cp->kstack);
                 kfree(cp->ucontext);
                 kfree(cp->kcontext);
                 kfree(cp);
                 release_sched_lock();
-                // printk("Child process with PID: %d exited. Exit code: %d\n", pid, *exitcode);
                 return pid;
             }
         }
-        // No zombie child found, sleep
         release_sched_lock();
-        // printk("No zombie child found. Sleeping...\n");
         wait_sem(&p->childexit);
-        // acquire();
     }
 }
 
@@ -198,13 +185,9 @@ NO_RETURN void exit(int code)
     // NOTE: be careful of concurrency
 
     Proc *p = thisproc();
-    // printk("Process with PID: %d exiting. Exit code: %d\n", p->pid, code);
-
-    // acquire_spinlock();
     p->exitcode = code;
+    acquire_sched_lock();
 
-    // Re-parent children to root_proc
-    // ListNode *node;
     _for_in_list(node, &p->children) {
         Proc *cp = container_of(node, Proc, ptnode);
         
@@ -220,15 +203,12 @@ NO_RETURN void exit(int code)
             post_sem(&root_proc.childexit);
         }
     }
-    // Wake up parent
+
     post_sem(&p->parent->childexit);
-
     p->state = ZOMBIE;
-    // printk("Process with PID: %d set to ZOMBIE state.\n", p->pid);
-
-    // release();
-
     sched(ZOMBIE);
+
+    release_sched_lock();
 
     PANIC(); // prevent the warning of 'no_return function returns'
 }

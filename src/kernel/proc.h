@@ -8,42 +8,42 @@
 
 enum procstate { UNUSED, RUNNABLE, RUNNING, SLEEPING, ZOMBIE };
 
-typedef struct UserContext {
-    // TODO: customize your trap frame
-    u64 regs[31];
-    u64 sp;
-    u64 pc;
-    u64 pstate;
-} UserContext;
-
-typedef struct KernelContext {
-    // TODO: customize your context
-    u64 sp;
-    u64 x19;
-    u64 x20;
-    u64 x21;
-    u64 x22;
-    u64 x23;
-    u64 x24;
-    u64 x25;
-    u64 x26;
-    u64 x27;
-    u64 x28;
-    u64 fp;
-    u64 lr;
-} KernelContext;
-
 // typedef struct UserContext {
 //     // TODO: customize your trap frame
-//     u64 spsr, elr;
-//     u64 x[18]; // x0-x18
+//     u64 regs[31];
+//     u64 sp;
+//     u64 pc;
+//     u64 pstate;
 // } UserContext;
 
 // typedef struct KernelContext {
 //     // TODO: customize your context
-//     u64 lr, x0, x1;
-//     u64 x[11]; // x19-x29
+//     u64 sp;
+//     u64 x19;
+//     u64 x20;
+//     u64 x21;
+//     u64 x22;
+//     u64 x23;
+//     u64 x24;
+//     u64 x25;
+//     u64 x26;
+//     u64 x27;
+//     u64 x28;
+//     u64 fp;
+//     u64 lr;
 // } KernelContext;
+
+typedef struct UserContext {
+    // TODO: customize your trap frame
+    u64 spsr, elr;
+    u64 x[18]; // x0-x18
+} UserContext;
+
+typedef struct KernelContext {
+    // TODO: customize your context
+    u64 lr, x0, x1;
+    u64 x[11]; // x19-x29
+} KernelContext;
 
 // embeded data for procs
 struct schinfo {
@@ -55,7 +55,7 @@ struct schinfo {
     bool in_ready_queue;    // 是否在就绪队列中
 };
 
-extern SpinLock proc_lock;
+// extern SpinLock proc_lock;
 
 typedef struct Proc {
     bool killed;

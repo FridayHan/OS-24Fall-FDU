@@ -24,6 +24,7 @@ void init_sched()
     printk("Initializing scheduler...\n");
 
     init_spinlock(&sched_lock);
+    // init_list_node(&run_queue);
 
     // 创建idle进程
     for (int i = 0; i < NCPU; i++) {
@@ -57,18 +58,18 @@ void acquire_sched_lock()
 {
     // TODO: acquire the sched_lock if need
 
-    printk("Acquiring.\n");
+    // printk("Acquiring.\n");
     acquire_spinlock(&sched_lock);
-    printk("Acquired.\n");
+    // printk("Acquired.\n");
 }
 
 void release_sched_lock()
 {
     // TODO: release the sched_lock if need
 
-    printk("Releasing.\n");
+    // printk("Releasing.\n");
     release_spinlock(&sched_lock);
-    printk("Released.\n");
+    // printk("Released.\n");
 }
 
 bool is_zombie(Proc *p)
@@ -92,6 +93,9 @@ bool activate_proc(Proc *p)
 
     printk("activate_proc acquiring\n");
     acquire_sched_lock();
+    if (p->pid == 0) {
+        init_list_node(&run_queue);
+    }
     cpus[cpuid()].sched.thisproc = p;
     if (p->state == RUNNING || p->state == RUNNABLE) {
         printk("Process PID %d is already RUNNING or RUNNABLE\n", p->pid);
@@ -127,7 +131,9 @@ static Proc *pick_next()
     // TODO: if using template sched function, you should implement this routinue
     // choose the next process to run, and return idle if no runnable process
 
-    // printk("Picking next process to run...\n");
+    if (panic_flag) {
+        return cpus[cpuid()].sched.idle_proc;
+    }
     _for_in_list(p, &run_queue) {
         if (p == &run_queue) 
             continue;
@@ -156,28 +162,32 @@ static void update_this_proc(Proc *p)
 void sched(enum procstate new_state)
 {
     auto this = thisproc();
-    // if (this->state == RUNNING) {
-    //     printk("STATE:RUNNING\n");
-    // } else if (this->state == RUNNABLE) {
-    //     printk("STATE:RUNNABLE\n");
-    // } else if (this->state == SLEEPING) {
-    //     printk("STATE:SLEEPING\n");
-    // } else if (this->state == ZOMBIE) {
-    //     printk("STATE:ZOMBIE\n");
-    // } else if (this->state == UNUSED) {
-    //     printk("STATE:UNUSED\n");
-    // }
-    // printk("Scheduling on CPU %lld, current process PID %d, new state: %d\n", cpuid(), this->pid, new_state); 
+    if (this->state == RUNNING) {
+        printk("STATE:RUNNING\n");
+    } else if (this->state == RUNNABLE) {
+        printk("STATE:RUNNABLE\n");
+    } else if (this->state == SLEEPING) {
+        printk("STATE:SLEEPING\n");
+    } else if (this->state == ZOMBIE) {
+        printk("STATE:ZOMBIE\n");
+    } else if (this->state == UNUSED) {
+        printk("STATE:UNUSED\n");
+    }
+        printk("p->pid: %d\n", this->pid);
+    printk("Scheduling on CPU %lld, current process PID %d, new state: %d\n", cpuid(), this->pid, new_state); 
     ASSERT(this->state == RUNNING);
     update_this_state(new_state);
     auto next = pick_next();
     update_this_proc(next);
     ASSERT(next->state == RUNNABLE);
     next->state = RUNNING;
+    printk("Next process to run: PID %d\n", next->pid);
+    printk("p->kcontext->lr: %llx\n", next->kcontext->lr);
     if (next != this) {
         swtch(next->kcontext, &this->kcontext);
     }
     release_sched_lock();
+    printk("Scheduling completed on CPU %lld\n", cpuid());
 }
 
 u64 proc_entry(void (*entry)(u64), u64 arg)

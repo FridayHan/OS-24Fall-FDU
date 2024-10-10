@@ -14,6 +14,7 @@ NO_RETURN void idle_entry()
         yield();
         if (panic_flag)
             break;
+        printk("vshieourbfjkvuhjrwbvhioualwjknedhfvfhiulejqwdkbfhvliujknfwbekvvhioujln\n");
         arch_with_trap
         {
             arch_wfi();
@@ -26,6 +27,7 @@ NO_RETURN void idle_entry()
 NO_RETURN void kernel_entry()
 {
     printk("Hello world! (Core %lld)\n", cpuid());
+    printk("bgwktujaefrndbhekijfk\n");
     proc_test();
 
     while (1)
