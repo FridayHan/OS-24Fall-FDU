@@ -26,9 +26,11 @@ void init_kproc()
 
     // init_spinlock(&proc_lock);
     init_proc(&root_proc);
-    root_proc.state = RUNNING;
+    root_proc.state = UNUSED;
     root_proc.parent = &root_proc;
     start_proc(&root_proc, kernel_entry, 123456);
+    acquire_sched_lock();
+    sched(RUNNABLE);
 }
 
 void init_proc(Proc *p)

@@ -31,7 +31,9 @@ void init_sched()
         Proc *p = kalloc(sizeof(Proc));
         p->idle = 1;
         p->state = RUNNING;
+        p->pid = -1;
         cpus[i].sched.idle_proc = cpus[i].sched.thisproc = p;
+        printk("cpus[i].sched.idle_proc.state: %d\n", cpus[i].sched.idle_proc->state);
     }
 }
 
@@ -93,7 +95,7 @@ bool activate_proc(Proc *p)
 
     printk("activate_proc acquiring\n");
     acquire_sched_lock();
-    cpus[cpuid()].sched.thisproc = p;
+    // cpus[cpuid()].sched.thisproc = p;
     if (p->state == RUNNING || p->state == RUNNABLE) {
         printk("Process PID %d is already RUNNING or RUNNABLE\n", p->pid);
         release_sched_lock();
@@ -162,18 +164,6 @@ static void update_this_proc(Proc *p)
 void sched(enum procstate new_state)
 {
     auto this = thisproc();
-    if (this->state == RUNNING) {
-        printk("STATE:RUNNING\n");
-    } else if (this->state == RUNNABLE) {
-        printk("STATE:RUNNABLE\n");
-    } else if (this->state == SLEEPING) {
-        printk("STATE:SLEEPING\n");
-    } else if (this->state == ZOMBIE) {
-        printk("STATE:ZOMBIE\n");
-    } else if (this->state == UNUSED) {
-        printk("STATE:UNUSED\n");
-    }
-        printk("p->pid: %d\n", this->pid);
     printk("Scheduling on CPU %lld, current process PID %d, new state: %d\n", cpuid(), this->pid, new_state); 
     printk("this->state: %d\n", this->state);
     ASSERT(this->state == RUNNING);
