@@ -33,7 +33,7 @@ void init_sched()
         p->state = RUNNING;
         p->pid = -1;
         cpus[i].sched.idle_proc = cpus[i].sched.thisproc = p;
-        // printk("cpus[i].sched.idle_proc.state: %d\n", cpus[i].sched.idle_proc->state);
+        printk("cpus[%d].sched.idle_proc.state: %d\n", i, cpus[i].sched.idle_proc->state);
     }
 }
 
@@ -62,7 +62,7 @@ void acquire_sched_lock()
 
     // printk("Acquiring.\n");
     acquire_spinlock(&sched_lock);
-    printk("Acquired.\n");
+    // printk("Acquired.\n");
 }
 
 void release_sched_lock()
@@ -71,7 +71,7 @@ void release_sched_lock()
 
     // printk("Releasing.\n");
     release_spinlock(&sched_lock);
-    printk("Released.\n");
+    // printk("Released.\n");
 }
 
 bool is_zombie(Proc *p)
@@ -139,8 +139,8 @@ static Proc *pick_next()
         return cpus[cpuid()].sched.idle_proc;
     }
     _for_in_list(p, &run_queue) {
-        if (p == &run_queue) 
-            continue;
+        // if (p == &run_queue) 
+        //     continue;
         auto proc = container_of(p, Proc, schinfo.sched_node);
         // _detach_from_list(&proc->schinfo.sched_node); // ?????
         if (proc->state == RUNNABLE) {
@@ -169,13 +169,20 @@ void sched(enum procstate new_state)
     // printk("Scheduling on CPU %lld, current process PID %d, new state: %d\n", cpuid(), this->pid, new_state); 
     printk("this->state: %d\n", this->state);
     printk("this->pid: %d\n", this->pid);
+
+    // printk("this->ptnode: %p\n", &this->ptnode);
+    // printk("this->ptnode.next: %p\n", this->ptnode.next);
+    // printk("this->ptnode.prev: %p\n", this->ptnode.prev);
+
     ASSERT(this->state == RUNNING);
     update_this_state(new_state);
     auto next = pick_next();
     update_this_proc(next);
-    // printk("next->state: %d\n", next->state);
+    printk("next->pid: %d\n", next->pid);
+    printk("next->state: %d\n", next->state);
     ASSERT(next->state == RUNNABLE);
     next->state = RUNNING;
+    printk("cpuid: %lld\n", cpuid());
     printk("Current process PID %d, new state: %d\n", this->pid, this->state);
     printk("Next process to run: PID %d, state: %d\n", next->pid, next->state);
     // printk("p->kcontext->lr: %llx\n", next->kcontext->lr);

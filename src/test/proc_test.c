@@ -128,7 +128,6 @@ static void proc_test_1()
     }
     for (int i = 0; i < 10; i++) {
         int code, id;
-        printk("proc_test_%d PASS\n", i);
         id = wait(&code);
         ASSERT(pid[code] == id);
         printk("proc %d exit\n", code);

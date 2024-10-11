@@ -50,7 +50,6 @@ bool wait_sem(Semaphore *sem)
     acquire_sched_lock();
     release_spinlock(&sem->lock);
     sched(SLEEPING);
-    printk("sched done\n");
     acquire_spinlock(&sem->lock); // also the lock for waitdata
     if (!wait->up) // wakeup by other sources
     {
