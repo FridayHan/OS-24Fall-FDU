@@ -8,7 +8,6 @@ volatile bool panic_flag;
 
 NO_RETURN void idle_entry()
 {
-    printk("Idle process started on core %lld\n", cpuid());
     set_cpu_on();
     while (1) {
         yield();
@@ -30,7 +29,6 @@ NO_RETURN void kernel_entry()
 
     while (1){
         yield();
-        // printk("cpuid: %lld\n", cpuid());
     }
 }
 

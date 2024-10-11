@@ -160,7 +160,7 @@ static void update_this_proc(Proc *p)
     // TODO: you should implement this routinue
     // update thisproc to the choosen process
 
-    // printk("Updating current process on CPU %lld to PID %d\n", cpuid(), p->pid);
+    printk("Updating current process on CPU %lld to PID %d\n", cpuid(), p->pid);
     cpus[cpuid()].sched.thisproc = p;
 }
 
