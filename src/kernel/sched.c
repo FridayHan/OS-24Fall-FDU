@@ -12,7 +12,7 @@ extern bool panic_flag;
 extern void swtch(KernelContext *new_ctx, KernelContext **old_ctx);
 
 SpinLock sched_lock;
-SpinLock run_queue_lock;
+// SpinLock run_queue_lock;
 ListNode run_queue;
 
 void init_sched()
@@ -22,7 +22,7 @@ void init_sched()
     // 2. initialize the scheduler info of each CPU
 
     init_spinlock(&sched_lock);
-    init_spinlock(&run_queue_lock);
+    // init_spinlock(&run_queue_lock);
     init_list_node(&run_queue);
 
     for (int i = 0; i < NCPU; i++) {
@@ -32,6 +32,7 @@ void init_sched()
         p->state = RUNNING;
         p->pid = -1;
         p->parent = NULL;
+        p->schinfo.in_run_queue = false;
         cpus[i].sched.idle_proc = cpus[i].sched.thisproc = p;
     }
 }
@@ -104,9 +105,9 @@ bool activate_proc(Proc *p)
         return false;
     } else if (p->state == SLEEPING || p->state == UNUSED) {
         p->state = RUNNABLE;
-        acquire_spinlock(&run_queue_lock);
+        // acquire_spinlock(&run_queue_lock);
         _insert_into_list(&run_queue, &p->schinfo.sched_node);
-        release_spinlock(&run_queue_lock);
+        // release_spinlock(&run_queue_lock);
         p->schinfo.in_run_queue = true;
     } else {
         printk("PANIC: Unexpected process state for PID %d\n", p->pid);
@@ -126,10 +127,18 @@ static void update_this_state(enum procstate new_state)
     thisproc()->state = new_state;
     if (new_state == SLEEPING || new_state == ZOMBIE) {
         if (thisproc()->schinfo.in_run_queue) {
-            acquire_spinlock(&run_queue_lock);
+            // acquire_spinlock(&run_queue_lock);
             _detach_from_list(&thisproc()->schinfo.sched_node);
             thisproc()->schinfo.in_run_queue = false;
-            release_spinlock(&run_queue_lock);
+            // release_spinlock(&run_queue_lock);
+        }
+    }
+    else if (new_state == RUNNABLE) {
+        if (!thisproc()->idle && !thisproc()->schinfo.in_run_queue) {
+            // acquire_spinlock(&run_queue_lock);
+            _insert_into_list(&run_queue, &thisproc()->schinfo.sched_node);
+            thisproc()->schinfo.in_run_queue = true;
+            // release_spinlock(&run_queue_lock);
         }
     }
 }
@@ -142,17 +151,23 @@ static Proc *pick_next()
     if (panic_flag) {
         return cpus[cpuid()].sched.idle_proc;
     }
-    acquire_spinlock(&run_queue_lock);
+    // acquire_spinlock(&run_queue_lock);
     for (ListNode *p = run_queue.next; p != &run_queue; p = p->next) {
         auto proc = container_of(p, Proc, schinfo.sched_node);
-        if (proc->state == RUNNABLE) {
-            release_spinlock(&run_queue_lock);
-            // printk("PICK: pid: %d, cpuid: %lld\n", proc->pid, cpuid());
-            return proc;
-        }
+        // release_spinlock(&run_queue_lock);
+        // printk("proc->state: %d, proc->pid: %d\n", proc->state, proc->pid);
+        _detach_from_list(&proc->schinfo.sched_node);
+        proc->schinfo.in_run_queue = false;
+        ASSERT(proc->state == RUNNABLE);
+        return proc;
+        // if (proc->state == RUNNABLE) {
+        //     release_spinlock(&run_queue_lock);
+        //     // printk("PICK: pid: %d, cpuid: %lld\n", proc->pid, cpuid());
+        //     return proc;
+        // }
     }
     // printk("PICK: pid: -1, cpuid: %lld\n", cpuid());
-    release_spinlock(&run_queue_lock);
+    // release_spinlock(&run_queue_lock);
     return cpus[cpuid()].sched.idle_proc;
 }
 
@@ -161,6 +176,13 @@ static void update_this_proc(Proc *p)
     // TODO: you should implement this routinue
     // update thisproc to the choosen process
 
+    // printk("update_this_proc: PID %d, cpuid %lld\n", p->pid, cpuid());
+    // acquire_spinlock(&run_queue_lock);
+    if (thisproc()->schinfo.in_run_queue) {
+        _detach_from_list(&thisproc()->schinfo.sched_node);
+        thisproc()->schinfo.in_run_queue = false;
+    }
+    // release_spinlock(&run_queue_lock);
     cpus[cpuid()].sched.thisproc = p;
 }
 
@@ -170,11 +192,14 @@ static void update_this_proc(Proc *p)
 void sched(enum procstate new_state)
 {
     auto this = thisproc();
-
+    // printk("sched: PID %d to %d, cpuid: %lld\n", this->pid, new_state, cpuid());
     ASSERT(this->state == RUNNING);
     update_this_state(new_state);
+    // printk("sched: PID %d, cpuid: %lld\n", this->pid, cpuid());
     auto next = pick_next();
+    // printk("sched: PID %d, cpuid: %lld\n", next->pid, cpuid());
     update_this_proc(next);
+    // printk("sched: PID %d, cpuid: %lld\n", this->pid, cpuid());
     ASSERT(next->state == RUNNABLE);
     next->state = RUNNING;
     if (next != this) {
