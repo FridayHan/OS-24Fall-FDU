@@ -9,7 +9,7 @@
 
 Proc root_proc;
 static int pid;
-// SpinLock proc_lock;
+SpinLock proc_lock;
 
 void kernel_entry();
 void proc_entry();
@@ -23,6 +23,7 @@ void init_kproc()
     // 2. init the root_proc (finished)
 
     init_proc(&root_proc);
+    init_spinlock(&proc_lock);
     init_sem(&root_proc.childexit, 0);
     root_proc.state = UNUSED;
     root_proc.parent = &root_proc;
@@ -103,7 +104,6 @@ int start_proc(Proc *p, void (*entry)(u64), u64 arg)
 
     int id = p->pid;
     activate_proc(p);
-    // acquire_spinlock(&proc_lock);
     return id;
 }
 
@@ -116,37 +116,30 @@ int wait(int *exitcode)
     // NOTE: be careful of concurrency
 
     Proc *p = thisproc();
-    acquire_sched_lock();
     if (_empty_list(&p->children)) {
-        release_sched_lock();
         return -1;
     }
-
-    while (1) {
-        for (ListNode *node = p->children.next; node != &p->children;) {
-            if (node == &p->children) {
-                continue;
+    wait_sem(&p->childexit);
+    acquire_spinlock(&proc_lock);
+    _for_in_list(node, &p->children)
+    {
+        if (node == &p->children)
+            continue;
+        Proc *cp = container_of(node, Proc, ptnode);
+        if (is_zombie(cp)) {
+            int pid = cp->pid;
+            if (exitcode) {
+                *exitcode = cp->exitcode;
             }
-            Proc *cp = container_of(node, Proc, ptnode);
-            ListNode *next_node = node->next;
-            if (cp->state == ZOMBIE) {
-                int pid = cp->pid;
-                if (exitcode) {
-                    *exitcode = cp->exitcode;
-                }
-                _detach_from_list(node);
-
-                // kfree(cp->kstack);
-                kfree(cp->kstack);
-                kfree(cp);
-                release_sched_lock();
-                return pid;
-            }
-            node = next_node;
+            _detach_from_list(node);
+            kfree(cp->kstack);
+            kfree(cp);
+            release_spinlock(&proc_lock);
+            return pid;
         }
-        release_sched_lock();
-        wait_sem(&p->childexit);
     }
+
+    PANIC();
 }
 
 NO_RETURN void exit(int code)
@@ -159,27 +152,23 @@ NO_RETURN void exit(int code)
     // NOTE: be careful of concurrency
 
     Proc *p = thisproc();
+    acquire_spinlock(&proc_lock);
     p->exitcode = code;
-    acquire_sched_lock();
-    for (ListNode *node = p->children.next; node != &p->children;) {
-        Proc *cp = container_of(node, Proc, ptnode);
-        ListNode* next_node = cp->ptnode.next;
-        _detach_from_list(&cp->ptnode);
-        cp->parent = &root_proc;
-        _insert_into_list(&root_proc.children, &cp->ptnode);
-        if (cp->state == ZOMBIE) {
-            release_sched_lock();
-            post_sem(&root_proc.childexit);
-            acquire_sched_lock();
-        }
-        node = next_node;
-    }
-    release_sched_lock();
-    if (p->parent != NULL && p != p->parent) {
-        post_sem(&p->parent->childexit);
-    }
 
+    while(!_empty_list(&p->children)) {
+        ListNode *node = p->children.next;
+        Proc *cp = container_of(node, Proc, ptnode);
+        _detach_from_list(node);
+        cp->parent = &root_proc;
+        _insert_into_list(&root_proc.children, node);
+        if (is_zombie(cp)) {
+            post_sem(&root_proc.childexit);
+        }
+    }
+    
+    post_sem(&p->parent->childexit);
     acquire_sched_lock();
+    release_spinlock(&proc_lock);
     sched(ZOMBIE);
 
     PANIC(); // prevent the warning of 'no_return function returns'
