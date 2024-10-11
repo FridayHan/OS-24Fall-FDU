@@ -43,6 +43,7 @@ bool wait_sem(Semaphore *sem)
         return true;
     }
     WaitData *wait = kalloc(sizeof(WaitData));
+    memset(wait, 0, sizeof(WaitData));
     wait->proc = thisproc();
     wait->up = false;
     _insert_into_list(&sem->sleeplist, &wait->slnode);
