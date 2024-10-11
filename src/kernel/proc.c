@@ -60,7 +60,7 @@ void init_proc(Proc *p)
     init_schinfo(&p->schinfo);
 
     p->kstack = kalloc(KSTACK_SIZE);
-    printk("kalloc_page: %p\n", p->kstack);
+    // printk("kalloc_page: %p\n", p->kstack);
     if (!p->kstack) {
         PANIC();
     }
@@ -76,7 +76,7 @@ Proc *create_proc()
 {
     // printk("Creating new process...\n");
     Proc *p = kalloc(sizeof(Proc));
-    printk("kalloc: %p\n", p);
+    // printk("kalloc: %p\n", p);
     init_proc(p);
     return p;
 }
@@ -149,7 +149,7 @@ int wait(int *exitcode)
 
     Proc *p = thisproc();
 
-    printk("wait acquiring\n");
+    // printk("wait acquiring\n");
     acquire_sched_lock();
     if (_empty_list(&p->children)) {
         release_sched_lock();
@@ -157,7 +157,7 @@ int wait(int *exitcode)
     }
 
     while (1) {
-        printk("current process: %d\n", p->pid);
+        // printk("current process: %d\n", p->pid);
         // _for_in_list(node, &p->children) {
         //     Proc *cp = container_of(node, Proc, ptnode);
         //     printk("child process: %d\n", cp->pid);
@@ -169,9 +169,9 @@ int wait(int *exitcode)
             }
             Proc *cp = container_of(node, Proc, ptnode);
             ListNode *next_node = node->next;
-            printk("next_node: %p\n", next_node);
+            // printk("next_node: %p\n", next_node);
 
-            printk("cp->state: %d\n", cp->state);
+            // printk("cp->state: %d\n", cp->state);
             if (cp->state == ZOMBIE) {
                 int pid = cp->pid;
                 if (exitcode) {
@@ -219,7 +219,7 @@ NO_RETURN void exit(int code)
 
     Proc *p = thisproc();
     p->exitcode = code;
-    printk("exit acquiring\n");
+    // printk("exit acquiring\n");
     acquire_sched_lock();
     // printk("thisproc->ptnode.prev: %p\n", p->ptnode.prev);
     // _for_in_list(node, &p->children) {
@@ -228,13 +228,13 @@ NO_RETURN void exit(int code)
         //     continue;
         // }
         Proc *cp = container_of(node, Proc, ptnode);
-        printk("cp->pid: %d\n", cp->pid);
-        if (cp->pid == 91)
-            printk("cp->state: %d\n", cp->state);
-        if (cp->pid == 1) {
-            printk("cp->state: %d\n", cp->state);
-            printk("cp->parent->pid: %d\n", cp->parent->pid);
-        }
+        // printk("cp->pid: %d\n", cp->pid);
+        // if (cp->pid == 91)
+        //     printk("cp->state: %d\n", cp->state);
+        // if (cp->pid == 1) {
+        //     printk("cp->state: %d\n", cp->state);
+        //     printk("cp->parent->pid: %d\n", cp->parent->pid);
+        // }
         ListNode* next_node = cp->ptnode.next;
         // 将子进程从当前进程的子进程列表中移除
         _detach_from_list(&cp->ptnode);
@@ -254,7 +254,7 @@ NO_RETURN void exit(int code)
     }
     // printk("thisproc->ptnode.prev: %p\n", p->ptnode.prev);
     release_sched_lock();
-    printk("exit thisproc->pid: %d\n", thisproc()->pid);
+    // printk("exit thisproc->pid: %d\n", thisproc()->pid);
     if (p->parent != NULL && p != p->parent) {
         post_sem(&p->parent->childexit);
     }

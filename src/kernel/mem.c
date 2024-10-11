@@ -52,8 +52,8 @@ void kinit()
     }
     
     // 初始化free_pages
-    u64 start_addr = K2P(round_up(K2P((u64)end), PAGE_SIZE)); // 可分配物理页的起始地址
-    for (u64 addr = start_addr; addr < K2P(PHYSTOP); addr += PAGE_SIZE) {
+    u64 start_addr = (round_up((u64)end, PAGE_SIZE)); // 可分配物理页的起始地址
+    for (u64 addr = start_addr; addr < P2K(PHYSTOP); addr += PAGE_SIZE) {
         Page* new_page = (Page*)addr;
         new_page->free_list_num = 0;
         new_page->block_size = 0;

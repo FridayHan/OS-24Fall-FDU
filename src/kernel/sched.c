@@ -12,6 +12,7 @@ extern bool panic_flag;
 extern void swtch(KernelContext *new_ctx, KernelContext **old_ctx);
 
 SpinLock sched_lock;
+SpinLock run_queue_lock;
 ListNode run_queue;
 
 void init_sched()
@@ -24,6 +25,7 @@ void init_sched()
     // printk("Initializing scheduler...\n");
 
     init_spinlock(&sched_lock);
+    init_spinlock(&run_queue_lock);
     init_list_node(&run_queue);
 
     // 创建idle进程
@@ -33,7 +35,7 @@ void init_sched()
         p->state = RUNNING;
         p->pid = -1;
         cpus[i].sched.idle_proc = cpus[i].sched.thisproc = p;
-        printk("cpus[%d].sched.idle_proc.state: %d\n", i, cpus[i].sched.idle_proc->state);
+        // printk("cpus[%d].sched.idle_proc.state: %d\n", i, cpus[i].sched.idle_proc->state);
     }
 }
 
@@ -51,6 +53,7 @@ void init_schinfo(struct schinfo *p)
 
     // printk("Initializing schinfo for process with PID %d\n", container_of(p, Proc, schinfo)->pid);
     init_list_node(&p->sched_node);
+    p->in_run_queue = false;
     // printk("Initialized sched_node: next = %p, prev = %p\n", p->sched_node.next, p->sched_node.prev);
     // init_spinlock(&p->lock)
     // printk("schinfo initialization completed for process at address: %p\n", p);
@@ -94,22 +97,38 @@ bool activate_proc(Proc *p)
     // printk("Activating process PID %d, current state: %d\n", p->pid, p->state);
 
     // printk("activate_proc acquiring\n");
-    if (cpuid() != 0)
+
+    // 打印run_queue
+    acquire_spinlock(&run_queue_lock);
+    // printk("RUN_QUEUE_LOCK acquired\n");
+    if (cpuid() != 0) {
+        for (ListNode *p = run_queue.next; p != &run_queue; p = p->next) {
+            auto proc = container_of(p, Proc, schinfo.sched_node);
+            printk("PID %d in run_queue\n", proc->pid);
+        }
+    }
+    release_spinlock(&run_queue_lock);
+    // printk("RUN_QUEUE_LOCK released\n");
+
+
+    
+    if (cpuid() != 0 || cpuid() == 0)
     {
         printk("pid: %d activated by cpu %lld\n", p->pid, cpuid());
     }
     acquire_sched_lock();
-    // cpus[cpuid()].sched.thisproc = p;
     if (p->state == RUNNING || p->state == RUNNABLE) {
         printk("Process PID %d is already RUNNING or RUNNABLE\n", p->pid);
         release_sched_lock();
         return false;
     } else if (p->state == SLEEPING || p->state == UNUSED) {
         p->state = RUNNABLE;
-        // printk("Process PID %d state changed to RUNNABLE\n", p->pid);
+        acquire_spinlock(&run_queue_lock);
+        // printk("RUN_QUEUE_LOCK acquired\n");
         _insert_into_list(&run_queue, &p->schinfo.sched_node);
+        release_spinlock(&run_queue_lock);
+        // printk("RUN_QUEUE_LOCK released\n");
         p->schinfo.in_run_queue = true;
-        // printk("Process PID %d added to run queue\n", p->pid);
     } else {
         printk("PANIC: Unexpected process state for PID %d\n", p->pid);
         PANIC();
@@ -129,8 +148,13 @@ static void update_this_state(enum procstate new_state)
     //     cpus[cpuid()].sched.thisproc = NULL;
     // }
     if (new_state == SLEEPING || new_state == ZOMBIE) {
-        if (thisproc()->schinfo.in_run_queue)
+        if (thisproc()->schinfo.in_run_queue) {
+            acquire_spinlock(&run_queue_lock);
+            // printk("RUN_QUEUE_LOCK acquired\n");
             _detach_from_list(&thisproc()->schinfo.sched_node);
+            release_spinlock(&run_queue_lock);
+            // printk("RUN_QUEUE_LOCK released\n");
+        }
     }
 }
 
@@ -142,16 +166,22 @@ static Proc *pick_next()
     if (panic_flag) {
         return cpus[cpuid()].sched.idle_proc;
     }
-    _for_in_list(p, &run_queue) {
+    acquire_spinlock(&run_queue_lock);
+    // printk("RUN_QUEUE_LOCK acquired\n");
+    for (ListNode *p = run_queue.next; p != &run_queue; p = p->next) {
         // if (p == &run_queue) 
         //     continue;
         auto proc = container_of(p, Proc, schinfo.sched_node);
         // _detach_from_list(&proc->schinfo.sched_node); // ?????
         if (proc->state == RUNNABLE) {
             // printk("Next process to run: PID %d\n", proc->pid);
+            release_spinlock(&run_queue_lock);
+            // printk("RUN_QUEUE_LOCK released\n");
             return proc;
         }
     }
+    release_spinlock(&run_queue_lock);
+    // printk("RUN_QUEUE_LOCK released\n");
     return cpus[cpuid()].sched.idle_proc;
 }
 
@@ -160,7 +190,7 @@ static void update_this_proc(Proc *p)
     // TODO: you should implement this routinue
     // update thisproc to the choosen process
 
-    printk("Updating current process on CPU %lld to PID %d\n", cpuid(), p->pid);
+    // printk("Updating current process on CPU %lld to PID %d\n", cpuid(), p->pid);
     cpus[cpuid()].sched.thisproc = p;
 }
 
