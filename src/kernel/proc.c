@@ -89,16 +89,14 @@ int start_proc(Proc *p, void (*entry)(u64), u64 arg)
     // NOTE: be careful of concurrency
     
     if (p->parent == NULL) {
-        // acquire_sched_lock();
         acquire_spinlock(&proc_lock);
         p->parent = &root_proc;
         _insert_into_list(&root_proc.children, &p->ptnode);
-        printk("Parent: %d, Child: %d\n", 0, p->pid);
-        // release_sched_lock();
+        // printk("Parent: %d, Child: %d\n", 0, p->pid);
         release_spinlock(&proc_lock);
     }
 
-    printk("start_proc: PID: %d\n", p->pid);
+    // printk("start_proc: PID: %d\n", p->pid);
 
     p->kcontext->lr = (u64)proc_entry;  
     p->kcontext->x0 = (u64)entry;
@@ -159,7 +157,7 @@ NO_RETURN void exit(int code)
     acquire_spinlock(&proc_lock);
     p->exitcode = code;
 
-    printk("exit: PID: %d, cpuid: %lld\n", p->pid, cpuid());
+    // printk("exit: PID: %d, cpuid: %lld\n", p->pid, cpuid());
     while(!_empty_list(&p->children)) {
         ListNode *node = p->children.next;
         Proc *cp = container_of(node, Proc, ptnode);
@@ -206,11 +204,11 @@ int allocate_pid() {
         int pid = pid_node->pid;
         kfree(pid_node);
         release_spinlock(&pid_lock);
-        printk("Allocated PID: %d\n", pid);
+        // printk("Allocated PID: %d\n", pid);
         return pid;
     }
     int pid = next_pid++;
-    printk("Allocated NEW PID: %d\n", pid);
+    // printk("Allocated NEW PID: %d\n", pid);
     release_spinlock(&pid_lock);
     return pid;
 }
