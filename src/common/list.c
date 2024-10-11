@@ -44,6 +44,7 @@ ListNode *_detach_from_list(ListNode *node)
 
     if (prev == node)
         return NULL;
+    return node;
     return prev;
 }
 

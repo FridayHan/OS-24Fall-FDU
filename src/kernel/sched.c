@@ -72,6 +72,7 @@ bool is_zombie(Proc *p)
 {
     bool r;
     acquire_sched_lock();
+    // printk("is_zombie acquire_sched_lock\n");
     r = p->state == ZOMBIE;
     release_sched_lock();
     return r;
@@ -94,6 +95,8 @@ bool activate_proc(Proc *p)
     // release_spinlock(&run_queue_lock);
 
     acquire_sched_lock();
+    // printk("activate_proc acquire_sched_lock\n");
+    printk("activate_proc: PID %d\n", p->pid);
     if (p->state == RUNNING || p->state == RUNNABLE) {
         release_sched_lock();
         return false;
@@ -122,6 +125,7 @@ static void update_this_state(enum procstate new_state)
         if (thisproc()->schinfo.in_run_queue) {
             acquire_spinlock(&run_queue_lock);
             _detach_from_list(&thisproc()->schinfo.sched_node);
+            thisproc()->schinfo.in_run_queue = false;
             release_spinlock(&run_queue_lock);
         }
     }
