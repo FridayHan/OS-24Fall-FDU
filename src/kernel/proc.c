@@ -29,8 +29,8 @@ void init_kproc()
     root_proc.state = UNUSED;
     root_proc.parent = &root_proc;
     start_proc(&root_proc, kernel_entry, 123456);
-    acquire_sched_lock();
-    sched(RUNNABLE);
+    // acquire_sched_lock();
+    // sched(RUNNABLE);
 }
 
 void init_proc(Proc *p)
@@ -59,7 +59,6 @@ void init_proc(Proc *p)
     init_list_node(&p->ptnode);
     init_schinfo(&p->schinfo);
 
-    // p->kstack = kalloc(KSTACK_SIZE);
     p->kstack = kalloc(KSTACK_SIZE);
     printk("kalloc_page: %p\n", p->kstack);
     if (!p->kstack) {

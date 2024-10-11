@@ -94,6 +94,10 @@ bool activate_proc(Proc *p)
     // printk("Activating process PID %d, current state: %d\n", p->pid, p->state);
 
     // printk("activate_proc acquiring\n");
+    if (cpuid() != 0)
+    {
+        printk("pid: %d activated by cpu %lld\n", p->pid, cpuid());
+    }
     acquire_sched_lock();
     // cpus[cpuid()].sched.thisproc = p;
     if (p->state == RUNNING || p->state == RUNNABLE) {
@@ -167,8 +171,8 @@ void sched(enum procstate new_state)
 {
     auto this = thisproc();
     // printk("Scheduling on CPU %lld, current process PID %d, new state: %d\n", cpuid(), this->pid, new_state); 
-    printk("this->state: %d\n", this->state);
-    printk("this->pid: %d\n", this->pid);
+    // printk("this->state: %d\n", this->state);
+    // printk("this->pid: %d\n", this->pid);
 
     // printk("this->ptnode: %p\n", &this->ptnode);
     // printk("this->ptnode.next: %p\n", this->ptnode.next);
@@ -178,13 +182,13 @@ void sched(enum procstate new_state)
     update_this_state(new_state);
     auto next = pick_next();
     update_this_proc(next);
-    printk("next->pid: %d\n", next->pid);
-    printk("next->state: %d\n", next->state);
+    // printk("next->pid: %d\n", next->pid);
+    // printk("next->state: %d\n", next->state);
     ASSERT(next->state == RUNNABLE);
     next->state = RUNNING;
-    printk("cpuid: %lld\n", cpuid());
-    printk("Current process PID %d, new state: %d\n", this->pid, this->state);
-    printk("Next process to run: PID %d, state: %d\n", next->pid, next->state);
+    // printk("cpuid: %lld\n", cpuid());
+    // printk("Current process PID %d, new state: %d\n", this->pid, this->state);
+    // printk("Next process to run: PID %d, state: %d\n", next->pid, next->state);
     // printk("p->kcontext->lr: %llx\n", next->kcontext->lr);
     if (next != this) {
         swtch(next->kcontext, &this->kcontext);

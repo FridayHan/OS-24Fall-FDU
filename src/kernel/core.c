@@ -30,7 +30,7 @@ NO_RETURN void kernel_entry()
 
     while (1){
         yield();
-        printk("cpuid: %lld\n", cpuid());
+        // printk("cpuid: %lld\n", cpuid());
     }
 }
 
