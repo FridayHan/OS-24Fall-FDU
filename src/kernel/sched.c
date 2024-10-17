@@ -114,8 +114,9 @@ bool activate_proc(Proc *p)
         release_spinlock(&run_queue_lock);
         p->schinfo.in_run_queue = true;
     } else {
-        printk("PANIC: Unexpected process state for PID %d\n", p->pid);
-        PANIC();
+        return false;
+        // printk("PANIC: Unexpected process state for PID %d\n", p->pid);
+        // PANIC();
     }
     release_sched_lock();
     return true;
