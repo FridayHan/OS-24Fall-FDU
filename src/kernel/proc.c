@@ -24,8 +24,6 @@ void init_kproc()
 
     init_proc(&root_proc);
     init_spinlock(&proc_lock);
-    init_sem(&root_proc.childexit, 0);
-    root_proc.state = UNUSED;
     root_proc.parent = &root_proc;
     start_proc(&root_proc, kernel_entry, 123456);
 }
@@ -54,7 +52,6 @@ void init_proc(Proc *p)
     init_schinfo(&p->schinfo);
 
     p->kstack = kalloc(KSTACK_SIZE);
-    // p->kstack = kalloc_page();
     if (!p->kstack) {
         PANIC();
     }

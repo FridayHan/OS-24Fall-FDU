@@ -27,7 +27,6 @@ void init_sched()
 
     for (int i = 0; i < NCPU; i++) {
         Proc *p = kalloc(sizeof(Proc));
-        // Proc *p = kalloc_page();
         p->idle = 1;
         p->state = RUNNING;
         p->pid = -1;

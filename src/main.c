@@ -25,8 +25,6 @@ void main()
         uart_init();
         printk_init();
 
-        // printk("Hello, world! (Core 0)\n");
-
         gicv3_init();
         gicv3_init_percpu();
 
