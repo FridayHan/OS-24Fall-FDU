@@ -16,7 +16,6 @@ static volatile bool boot_secondary_cpus = false;
 void main()
 {
     if (cpuid() == 0) {
-        /* @todo: Clear BSS section.*/
         extern char edata[], end[];
         memset(edata, 0, (usize)(end - edata));
 
@@ -25,6 +24,8 @@ void main()
 
         uart_init();
         printk_init();
+
+        // printk("Hello, world! (Core 0)\n");
 
         gicv3_init();
         gicv3_init_percpu();

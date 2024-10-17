@@ -1,6 +1,7 @@
 #pragma once
 
 #include <kernel/proc.h>
+#include <kernel/printk.h>
 
 void init_sched();
 void init_schinfo(struct schinfo *);

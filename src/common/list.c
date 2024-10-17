@@ -1,4 +1,5 @@
 #include <common/list.h>
+#include <kernel/printk.h>
 
 void init_list_node(ListNode *node)
 {

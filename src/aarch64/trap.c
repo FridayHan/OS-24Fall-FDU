@@ -33,6 +33,7 @@ void trap_global_handler(UserContext *context)
     case ESR_EC_IABORT_EL1:
     case ESR_EC_DABORT_EL0:
     case ESR_EC_DABORT_EL1: {
+        printk("cpuid: %lld\n", cpuid());
         printk("Page fault\n");
         PANIC();
     } break;

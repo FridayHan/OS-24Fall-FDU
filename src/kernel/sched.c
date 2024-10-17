@@ -5,36 +5,68 @@
 #include <aarch64/intrinsic.h>
 #include <kernel/cpu.h>
 #include <common/rbtree.h>
+#include <common/spinlock.h>
 
 extern bool panic_flag;
 
 extern void swtch(KernelContext *new_ctx, KernelContext **old_ctx);
+
+SpinLock sched_lock;
+SpinLock run_queue_lock;
+ListNode run_queue;
 
 void init_sched()
 {
     // TODO: initialize the scheduler
     // 1. initialize the resources (e.g. locks, semaphores)
     // 2. initialize the scheduler info of each CPU
+
+    init_spinlock(&sched_lock);
+    init_spinlock(&run_queue_lock);
+    init_list_node(&run_queue);
+
+    for (int i = 0; i < NCPU; i++) {
+        Proc *p = kalloc(sizeof(Proc));
+        // Proc *p = kalloc_page();
+        p->idle = 1;
+        p->state = RUNNING;
+        p->pid = -1;
+        cpus[i].sched.idle_proc = cpus[i].sched.thisproc = p;
+    }
 }
 
 Proc *thisproc()
 {
     // TODO: return the current process
+    Proc *p = cpus[cpuid()].sched.thisproc;
+    // printk("pid: %d activated by cpu %lld\n", p->pid, cpuid());
+    return p;
 }
 
 void init_schinfo(struct schinfo *p)
 {
     // TODO: initialize your customized schinfo for every newly-created process
+
+    init_list_node(&p->sched_node);
+    p->in_run_queue = false;
 }
 
 void acquire_sched_lock()
 {
     // TODO: acquire the sched_lock if need
+
+    // printk("Acquiring.\n");
+    acquire_spinlock(&sched_lock);
+    // printk("Acquired.\n");
 }
 
 void release_sched_lock()
 {
     // TODO: release the sched_lock if need
+
+    // printk("Releasing.\n");
+    release_spinlock(&sched_lock);
+    // printk("Released.\n");
 }
 
 bool is_zombie(Proc *p)
@@ -61,24 +93,76 @@ bool activate_proc(Proc *p)
     // if the proc->state is RUNNING/RUNNABLE, do nothing
     // if the proc->state if SLEEPING/UNUSED, set the process state to RUNNABLE and add it to the sched queue
     // else: panic
+
+    // acquire_spinlock(&run_queue_lock);
+    // if (cpuid() != 0) {
+    //     for (ListNode *p = run_queue.next; p != &run_queue; p = p->next) {
+    //         auto proc = container_of(p, Proc, schinfo.sched_node);
+    //         printk("PID %d in run_queue\n", proc->pid);
+    //     }
+    // }
+    // release_spinlock(&run_queue_lock);
+
+    acquire_sched_lock();
+    if (p->state == RUNNING || p->state == RUNNABLE) {
+        release_sched_lock();
+        return false;
+    } else if (p->state == SLEEPING || p->state == UNUSED) {
+        p->state = RUNNABLE;
+        acquire_spinlock(&run_queue_lock);
+        _insert_into_list(&run_queue, &p->schinfo.sched_node);
+        release_spinlock(&run_queue_lock);
+        p->schinfo.in_run_queue = true;
+    } else {
+        printk("PANIC: Unexpected process state for PID %d\n", p->pid);
+        PANIC();
+    }
+    release_sched_lock();
+    return true;
 }
 
 static void update_this_state(enum procstate new_state)
 {
     // TODO: if you use template sched function, you should implement this routinue
-    // update the state of current process to new_state, and modify the sched queue if necessary
+    // update the state of current process to new_state, and not [remove it from the sched queue if
+    // new_state=SLEEPING/ZOMBIE]
+    
+    thisproc()->state = new_state;
+    if (new_state == SLEEPING || new_state == ZOMBIE) {
+        if (thisproc()->schinfo.in_run_queue) {
+            acquire_spinlock(&run_queue_lock);
+            _detach_from_list(&thisproc()->schinfo.sched_node);
+            release_spinlock(&run_queue_lock);
+        }
+    }
 }
 
 static Proc *pick_next()
 {
     // TODO: if using template sched function, you should implement this routinue
     // choose the next process to run, and return idle if no runnable process
+
+    if (panic_flag) {
+        return cpus[cpuid()].sched.idle_proc;
+    }
+    acquire_spinlock(&run_queue_lock);
+    for (ListNode *p = run_queue.next; p != &run_queue; p = p->next) {
+        auto proc = container_of(p, Proc, schinfo.sched_node);
+        if (proc->state == RUNNABLE) {
+            release_spinlock(&run_queue_lock);
+            return proc;
+        }
+    }
+    release_spinlock(&run_queue_lock);
+    return cpus[cpuid()].sched.idle_proc;
 }
 
 static void update_this_proc(Proc *p)
 {
     // TODO: you should implement this routinue
     // update thisproc to the choosen process
+
+    cpus[cpuid()].sched.thisproc = p;
 }
 
 // A simple scheduler.
@@ -87,6 +171,7 @@ static void update_this_proc(Proc *p)
 void sched(enum procstate new_state)
 {
     auto this = thisproc();
+
     ASSERT(this->state == RUNNING);
     update_this_state(new_state);
     auto next = pick_next();
