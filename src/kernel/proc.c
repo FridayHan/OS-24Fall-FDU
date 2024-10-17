@@ -54,7 +54,6 @@ void init_proc(Proc *p)
     init_schinfo(&p->schinfo);
 
     p->kstack = kalloc(KSTACK_SIZE);
-    // p->kstack = kalloc_page();
     if (!p->kstack) {
         PANIC();
     }
