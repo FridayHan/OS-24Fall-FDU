@@ -37,10 +37,6 @@ void init_proc(Proc *p)
     // setup the Proc with kstack and pid allocated
     // NOTE: be careful of concurrency
 
-    if (cpuid() != 0)
-    {
-        printk("init_proc executing on CPU %lld\n", cpuid());
-    }
     memset(p, 0, sizeof(Proc));
 
     p->killed = false;
@@ -66,11 +62,6 @@ void init_proc(Proc *p)
 
 Proc *create_proc()
 {
-    if (cpuid() != 0)
-    {
-        printk("create_proc executing on CPU %lld\n", cpuid());
-    }
-
     Proc *p = kalloc(sizeof(Proc));
     init_proc(p);
     return p;
@@ -82,10 +73,6 @@ void set_parent_to_this(Proc *proc)
     // NOTE: maybe you need to lock the process tree
     // NOTE: it's ensured that the old proc->parent = NULL
 
-    if (cpuid() != 0)
-    {
-        printk("set_parent_to_this executing on CPU %lld\n", cpuid());
-    }
     acquire_spinlock(&proc_lock);
     proc->parent = thisproc();
     _insert_into_list(&thisproc()->children, &proc->ptnode);
@@ -100,11 +87,6 @@ int start_proc(Proc *p, void (*entry)(u64), u64 arg)
     // 3. activate the proc and return its pid
     // NOTE: be careful of concurrency
     
-    if (cpuid() != 0)
-    {
-        printk("start_proc executing on CPU %lld\n", cpuid());
-    }
-
     if (p->parent == NULL) {
         // acquire_sched_lock();
         acquire_spinlock(&proc_lock);
