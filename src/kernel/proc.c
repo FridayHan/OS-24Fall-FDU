@@ -37,6 +37,10 @@ void init_proc(Proc *p)
     // setup the Proc with kstack and pid allocated
     // NOTE: be careful of concurrency
 
+    if (cpuid() != 0)
+    {
+        printk("init_proc executing on CPU %lld\n", cpuid());
+    }
     memset(p, 0, sizeof(Proc));
 
     p->killed = false;
@@ -62,6 +66,11 @@ void init_proc(Proc *p)
 
 Proc *create_proc()
 {
+    if (cpuid() != 0)
+    {
+        printk("create_proc executing on CPU %lld\n", cpuid());
+    }
+
     Proc *p = kalloc(sizeof(Proc));
     init_proc(p);
     return p;
@@ -73,6 +82,10 @@ void set_parent_to_this(Proc *proc)
     // NOTE: maybe you need to lock the process tree
     // NOTE: it's ensured that the old proc->parent = NULL
 
+    if (cpuid() != 0)
+    {
+        printk("set_parent_to_this executing on CPU %lld\n", cpuid());
+    }
     acquire_spinlock(&proc_lock);
     proc->parent = thisproc();
     _insert_into_list(&thisproc()->children, &proc->ptnode);
@@ -87,6 +100,11 @@ int start_proc(Proc *p, void (*entry)(u64), u64 arg)
     // 3. activate the proc and return its pid
     // NOTE: be careful of concurrency
     
+    if (cpuid() != 0)
+    {
+        printk("start_proc executing on CPU %lld\n", cpuid());
+    }
+
     if (p->parent == NULL) {
         // acquire_sched_lock();
         acquire_spinlock(&proc_lock);
@@ -115,6 +133,11 @@ int wait(int *exitcode)
     // 2. wait for childexit
     // 3. if any child exits, clean it up and return its pid and exitcode
     // NOTE: be careful of concurrency
+
+    if (cpuid() != 0)
+    {
+        printk("wait executing on CPU %lld\n", cpuid());
+    }
 
     Proc *p = thisproc();
     if (_empty_list(&p->children)) {
@@ -154,11 +177,16 @@ NO_RETURN void exit(int code)
     // 4. sched(ZOMBIE)
     // NOTE: be careful of concurrency
 
+    if (cpuid() != 0)
+    {
+        printk("exit executing on CPU %lld\n", cpuid());
+    }
+
     Proc *p = thisproc();
     acquire_spinlock(&proc_lock);
     p->exitcode = code;
 
-    printk("exit: PID: %d, cpuid: %lld\n", p->pid, cpuid());
+    // printk("exit: PID: %d, cpuid: %lld\n", p->pid, cpuid());
     while(!_empty_list(&p->children)) {
         ListNode *node = p->children.next;
         Proc *cp = container_of(node, Proc, ptnode);
@@ -189,9 +217,6 @@ void init_pid_pool(int initial_pid_count) {
         PIDNode *pid_node = kalloc(sizeof(PIDNode));
         pid_node->pid = i;
         _insert_into_list(&free_pid_list, &pid_node->node);
-        if (_empty_list(&free_pid_list)) {
-            PANIC();
-        }
     }
 }
 
@@ -204,11 +229,9 @@ int allocate_pid() {
         int pid = pid_node->pid;
         kfree(pid_node);
         release_spinlock(&pid_lock);
-        printk("Allocated PID: %d\n", pid);
         return pid;
     }
     int pid = next_pid++;
-    printk("Allocated NEW PID: %d\n", pid);
     release_spinlock(&pid_lock);
     return pid;
 }

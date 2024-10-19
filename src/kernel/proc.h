@@ -48,6 +48,11 @@ typedef struct Proc {
     KernelContext *kcontext;
 } Proc;
 
+extern Proc root_proc;
+extern ListNode free_pid_list; 
+extern SpinLock pid_lock;
+extern SpinLock proc_lock;
+
 void init_kproc();
 void init_proc(Proc *);
 Proc *create_proc();
