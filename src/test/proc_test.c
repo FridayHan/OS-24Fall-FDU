@@ -147,7 +147,13 @@ void proc_test()
         if (id == -1)
             break;
         if (id == pid)
+        {  
+            if (code != 0)
+            {
+                printk("pid %d exit with code %d\n", id, code);
+            }
             ASSERT(code == 0);
+        }
         else
             t |= 1 << (code - 20);
     }
