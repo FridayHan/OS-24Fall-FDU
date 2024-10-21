@@ -37,6 +37,7 @@ int get_all_sem(Semaphore *sem)
 
 bool wait_sem(Semaphore *sem)
 {
+    // printk("wait_sem PID: %d\n", thisproc()->pid);
     acquire_spinlock(&sem->lock);
     if (--sem->val >= 0) {
         release_spinlock(&sem->lock);

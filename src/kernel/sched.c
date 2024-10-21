@@ -98,14 +98,14 @@ bool activate_proc(Proc *p)
     // }
     // release_spinlock(&run_queue_lock);
 
-    if (cpuid() != 0)
-    {
-        printk("activate_proc executing on CPU %lld\n", cpuid());
-    }
+    // if (1)
+    // {
+    //     printk("activate_proc executing on CPU %lld\n", cpuid());
+    // }
 
     acquire_sched_lock();
     // printk("activate_proc acquire_sched_lock\n");
-    printk("activate_proc: PID %d\n", p->pid);
+    // printk("activate_proc: PID %d\n", p->pid);
     if (p->state == RUNNING || p->state == RUNNABLE) {
         release_sched_lock();
         return false;
@@ -149,10 +149,15 @@ static Proc *pick_next()
 {
     // TODO: if using template sched function, you should implement this routinue
     // choose the next process to run, and return idle if no runnable process
-    if (thisproc()->pid > 0 && cpuid() == 0)
+    if (thisproc()->pid > 4 && cpuid() == 0)
     {
         return cpus[cpuid()].sched.idle_proc;
     }
+    // if (cpuid() != 0 && thisproc()->pid != -1)
+    // {
+    //     printk("pick_next executing on CPU %lld\n", cpuid());
+    // }
+
     if (panic_flag) {
         return cpus[cpuid()].sched.idle_proc;
     }
