@@ -9,7 +9,7 @@
 
 Proc root_proc;
 static int pid;
-SpinLock proc_lock;
+// SpinLock proc_lock;
 
 void kernel_entry();
 void proc_entry();
@@ -23,7 +23,7 @@ void init_kproc()
     // 2. init the root_proc (finished)
 
     init_proc(&root_proc);
-    init_spinlock(&proc_lock);
+    // init_spinlock(&proc_lock);
     init_sem(&root_proc.childexit, 0);
     root_proc.state = UNUSED;
     root_proc.parent = &root_proc;
@@ -119,7 +119,7 @@ int wait(int *exitcode)
         return -1;
     }
     wait_sem(&p->childexit);
-    acquire_spinlock(&proc_lock);
+    acquire_sched_lock();
     _for_in_list(node, &p->children)
     {
         if (node == &p->children)
@@ -133,7 +133,7 @@ int wait(int *exitcode)
             _detach_from_list(node);
             kfree(cp->kstack);
             kfree(cp);
-            release_spinlock(&proc_lock);
+            release_sched_lock();
             return pid;
         }
     }
@@ -151,7 +151,7 @@ NO_RETURN void exit(int code)
     // NOTE: be careful of concurrency
 
     Proc *p = thisproc();
-    acquire_spinlock(&proc_lock);
+    acquire_sched_lock();
     p->exitcode = code;
 
     while(!_empty_list(&p->children)) {
@@ -167,7 +167,7 @@ NO_RETURN void exit(int code)
     
     post_sem(&p->parent->childexit);
     acquire_sched_lock();
-    release_spinlock(&proc_lock);
+    release_sched_lock();
     sched(ZOMBIE);
 
     PANIC(); // prevent the warning of 'no_return function returns'
@@ -178,5 +178,19 @@ int kill(int pid)
     // TODO:
     // Set the killed flag of the proc to true and return 0.
     // Return -1 if the pid is invalid (proc not found).
-    return 0;
+
+    acquire_sched_lock();
+    _for_in_list(node, &root_proc.children)
+    {
+        // if (node == &root_proc.children)
+        //     continue;
+        Proc *p = container_of(node, Proc, ptnode);
+        if (p->pid == pid) {
+            p->killed = true;
+            release_sched_lock();
+            return 0;
+        }
+    }
+    release_sched_lock();
+    return -1;
 }
