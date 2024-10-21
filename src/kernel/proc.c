@@ -8,6 +8,10 @@
 #include <fs/defines.h>
 
 Proc root_proc;
+ListNode free_pid_list; 
+static int next_pid = INITIAL_PID_COUNT;
+SpinLock pid_lock;
+SpinLock proc_lock;
 static int pid;
 // SpinLock proc_lock;
 
@@ -21,7 +25,8 @@ void init_kproc()
     // TODO:
     // 1. init global resources (e.g. locks, semaphores)
     // 2. init the root_proc (finished)
-
+    
+    init_pid_pool(INITIAL_PID_COUNT);
     init_proc(&root_proc);
     // init_spinlock(&proc_lock);
     init_sem(&root_proc.childexit, 0);
@@ -40,9 +45,7 @@ void init_proc(Proc *p)
 
     p->killed = false;
     p->idle = false;
-    acquire_sched_lock();
-    p->pid = pid++;
-    release_sched_lock();
+    p->pid = allocate_pid();
     p->state = UNUSED;
     p->parent = NULL;
     p->exitcode = 0;
@@ -52,6 +55,7 @@ void init_proc(Proc *p)
     init_list_node(&p->children);
     init_list_node(&p->ptnode);
     init_schinfo(&p->schinfo);
+    init_spinlock(&p->schinfo.lock);
 
     p->kstack = kalloc(KSTACK_SIZE);
     if (!p->kstack) {
@@ -64,7 +68,6 @@ void init_proc(Proc *p)
 Proc *create_proc()
 {
     Proc *p = kalloc(sizeof(Proc));
-    // Proc *p = kalloc_page();
     init_proc(p);
     return p;
 }
@@ -75,10 +78,10 @@ void set_parent_to_this(Proc *proc)
     // NOTE: maybe you need to lock the process tree
     // NOTE: it's ensured that the old proc->parent = NULL
 
-    acquire_sched_lock();
+    acquire_spinlock(&proc->schinfo.lock);
     proc->parent = thisproc();
     _insert_into_list(&thisproc()->children, &proc->ptnode);
-    release_sched_lock();
+    release_spinlock(&proc->schinfo.lock);
 }
 
 int start_proc(Proc *p, void (*entry)(u64), u64 arg)
@@ -90,12 +93,16 @@ int start_proc(Proc *p, void (*entry)(u64), u64 arg)
     // NOTE: be careful of concurrency
     
     if (p->parent == NULL) {
-        acquire_sched_lock();
+        acquire_spinlock(&p->schinfo.lock);
+        acquire_spinlock(&root_proc.schinfo.lock);
         p->parent = &root_proc;
         _insert_into_list(&root_proc.children, &p->ptnode);
         // printk("Parent: %d, Child: %d\n", 0, p->pid);
-        release_sched_lock();
+        release_spinlock(&root_proc.schinfo.lock);
+        release_spinlock(&p->schinfo.lock);
     }
+
+    // printk("start_proc: PID: %d\n", p->pid);
 
     p->kcontext->lr = (u64)proc_entry;  
     p->kcontext->x0 = (u64)entry;
@@ -114,30 +121,51 @@ int wait(int *exitcode)
     // 3. if any child exits, clean it up and return its pid and exitcode
     // NOTE: be careful of concurrency
 
+    // if (1)
+    // {
+    //     printk("wait PID: %d executing on CPU %lld\n", thisproc()->pid, cpuid());
+    // }
+
     Proc *p = thisproc();
+
+    for (ListNode *node = p->children.next; node != &p->children; node = node->next)
+    {
+        // printk("Parent: %d, Child: %d\n", p->pid, container_of(node, Proc, ptnode)->pid);
+    }
+    
     if (_empty_list(&p->children)) {
         return -1;
     }
+
+    // wait_sem(&p->childexit);
+
+    while (1)
+    {
+        wait_sem(&p->childexit);
     wait_sem(&p->childexit);
     acquire_sched_lock();
     _for_in_list(node, &p->children)
     {
-        if (node == &p->children)
-            continue;
         Proc *cp = container_of(node, Proc, ptnode);
         if (is_zombie(cp)) {
             int pid = cp->pid;
+            acquire_spinlock(&p->schinfo.lock);
+            _detach_from_list(node);
+            release_spinlock(&p->schinfo.lock);
+            // acquire_spinlock(&proc_lock);
             if (exitcode) {
                 *exitcode = cp->exitcode;
             }
-            _detach_from_list(node);
             kfree(cp->kstack);
             kfree(cp);
+            // release_spinlock(&proc_lock);
             release_sched_lock();
             return pid;
         }
     }
+    }
 
+    printk("wait PID: %d no zombie\n", p->pid);
     PANIC();
 }
 
@@ -150,22 +178,40 @@ NO_RETURN void exit(int code)
     // 4. sched(ZOMBIE)
     // NOTE: be careful of concurrency
 
+    // if (1)
+    // {
+    //     printk("exit PID: %d executing on CPU %lld\n", thisproc()->pid, cpuid());
+    // }
+
     Proc *p = thisproc();
+    acquire_spinlock(&proc_lock);
+    acquire_spinlock(&p->schinfo.lock);
     acquire_sched_lock();
     p->exitcode = code;
 
+    printk("exit: PID: %d, cpuid: %lld\n", p->pid, cpuid());
     while(!_empty_list(&p->children)) {
         ListNode *node = p->children.next;
         Proc *cp = container_of(node, Proc, ptnode);
+        acquire_spinlock(&cp->schinfo.lock);
         _detach_from_list(node);
         cp->parent = &root_proc;
+        release_spinlock(&cp->schinfo.lock);
+        acquire_spinlock(&root_proc.schinfo.lock);
         _insert_into_list(&root_proc.children, node);
+        release_spinlock(&root_proc.schinfo.lock);
         if (is_zombie(cp)) {
             post_sem(&root_proc.childexit);
         }
     }
-    
+
     post_sem(&p->parent->childexit);
+
+    release_spinlock(&p->schinfo.lock);
+    release_spinlock(&proc_lock);
+    deallocate_pid(p->pid);
+    acquire_sched_lock();
+    printk("exit acquire_sched_lock\n");
     acquire_sched_lock();
     release_sched_lock();
     sched(ZOMBIE);
@@ -193,4 +239,38 @@ int kill(int pid)
     }
     release_sched_lock();
     return -1;
+}
+
+void init_pid_pool(int initial_pid_count) {
+    init_list_node(&free_pid_list);
+    init_spinlock(&pid_lock);
+    for (int i = initial_pid_count - 1; i >= 0; i--) {
+        PIDNode *pid_node = kalloc(sizeof(PIDNode));
+        pid_node->pid = i;
+        _insert_into_list(&free_pid_list, &pid_node->node);
+    }
+}
+
+int allocate_pid() {
+    acquire_spinlock(&pid_lock);
+    if (!_empty_list(&free_pid_list)) {
+        ListNode *node = free_pid_list.next;
+        _detach_from_list(free_pid_list.next);
+        PIDNode *pid_node = container_of(node, PIDNode, node);
+        int pid = pid_node->pid;
+        kfree(pid_node);
+        release_spinlock(&pid_lock);
+        return pid;
+    }
+    int pid = next_pid++;
+    release_spinlock(&pid_lock);
+    return pid;
+}
+
+void deallocate_pid(int pid) {
+    acquire_spinlock(&pid_lock);
+    PIDNode *pid_node = kalloc(sizeof(PIDNode));
+    pid_node->pid = pid;
+    _insert_into_list(&free_pid_list, &pid_node->node);
+    release_spinlock(&pid_lock);
 }

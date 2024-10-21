@@ -61,6 +61,11 @@ int post_all_sem(Semaphore *sem)
 
 bool _wait_sem(Semaphore *sem)
 {
+<<<<<<< HEAD
+=======
+    // printk("wait_sem PID: %d\n", thisproc()->pid);
+    acquire_spinlock(&sem->lock);
+>>>>>>> lab2-dev
     if (--sem->val >= 0) {
         release_spinlock(&sem->lock);
         return true;

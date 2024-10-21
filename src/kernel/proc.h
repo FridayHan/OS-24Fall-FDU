@@ -9,31 +9,6 @@
 
 enum procstate { UNUSED, RUNNABLE, RUNNING, SLEEPING, ZOMBIE };
 
-// typedef struct UserContext {
-//     // TODO: customize your trap frame
-//     u64 regs[31];
-//     u64 sp;
-//     u64 pc;
-//     u64 pstate;
-// } UserContext;
-
-// typedef struct KernelContext {
-//     // TODO: customize your context
-//     u64 sp;
-//     u64 x19;
-//     u64 x20;
-//     u64 x21;
-//     u64 x22;
-//     u64 x23;
-//     u64 x24;
-//     u64 x25;
-//     u64 x26;
-//     u64 x27;
-//     u64 x28;
-//     u64 fp;
-//     u64 lr;
-// } KernelContext;
-
 typedef struct UserContext {
     // TODO: customize your trap frame
     u64 spsr, elr, sp;
@@ -46,11 +21,17 @@ typedef struct KernelContext {
     u64 x[11]; // x19-x29
 } KernelContext;
 
+typedef struct PIDNode {
+    ListNode node;
+    int pid;
+} PIDNode;
+
 // embeded data for procs
 struct schinfo {
     // TODO: customize your sched info
     ListNode sched_node;    // 调度队列节点
     bool in_run_queue;    // 是否在就绪队列中
+    SpinLock lock;
 };
 
 typedef struct Proc {
@@ -70,10 +51,22 @@ typedef struct Proc {
     KernelContext *kcontext;
 } Proc;
 
+extern Proc root_proc;
+extern ListNode free_pid_list; 
+extern SpinLock pid_lock;
+extern SpinLock proc_lock;
+
 void init_kproc();
 void init_proc(Proc *);
 Proc *create_proc();
 int start_proc(Proc *, void (*entry)(u64), u64 arg);
 NO_RETURN void exit(int code);
 int wait(int *exitcode);
+<<<<<<< HEAD
 int kill(int pid);
+=======
+
+void init_pid_pool(int initial_pid_count);
+int allocate_pid();
+void deallocate_pid(int pid);
+>>>>>>> lab2-dev

@@ -27,9 +27,12 @@ void init_sched()
 
     for (int i = 0; i < NCPU; i++) {
         Proc *p = kalloc(sizeof(Proc));
-        // Proc *p = kalloc_page();
+        if (!p) {
+            PANIC();
+        }
         p->idle = 1;
         p->state = RUNNING;
+        p->parent = NULL;
         p->pid = -1;
         cpus[i].sched.idle_proc = cpus[i].sched.thisproc = p;
     }
@@ -38,8 +41,8 @@ void init_sched()
 Proc *thisproc()
 {
     // TODO: return the current process
+
     Proc *p = cpus[cpuid()].sched.thisproc;
-    // printk("pid: %d activated by cpu %lld\n", p->pid, cpuid());
     return p;
 }
 
@@ -73,6 +76,7 @@ bool is_zombie(Proc *p)
 {
     bool r;
     acquire_sched_lock();
+    // printk("is_zombie acquire_sched_lock\n");
     r = p->state == ZOMBIE;
     release_sched_lock();
     return r;
@@ -103,7 +107,14 @@ bool activate_proc(Proc *p)
     // }
     // release_spinlock(&run_queue_lock);
 
+    // if (1)
+    // {
+    //     printk("activate_proc executing on CPU %lld\n", cpuid());
+    // }
+
     acquire_sched_lock();
+    // printk("activate_proc acquire_sched_lock\n");
+    // printk("activate_proc: PID %d\n", p->pid);
     if (p->state == RUNNING || p->state == RUNNABLE) {
         release_sched_lock();
         return false;
@@ -128,11 +139,17 @@ static void update_this_state(enum procstate new_state)
     // update the state of current process to new_state, and not [remove it from the sched queue if
     // new_state=SLEEPING/ZOMBIE]
     
+    // if (cpuid() != 0 && thisproc()->pid != -1)
+    // {
+    //     printk("update_this_state executing on CPU %lld\n", cpuid());
+    // }
+
     thisproc()->state = new_state;
     if (new_state == SLEEPING || new_state == ZOMBIE) {
         if (thisproc()->schinfo.in_run_queue) {
             acquire_spinlock(&run_queue_lock);
             _detach_from_list(&thisproc()->schinfo.sched_node);
+            thisproc()->schinfo.in_run_queue = false;
             release_spinlock(&run_queue_lock);
         }
     }
@@ -142,18 +159,33 @@ static Proc *pick_next()
 {
     // TODO: if using template sched function, you should implement this routinue
     // choose the next process to run, and return idle if no runnable process
+    if (thisproc()->pid > 4 && cpuid() == 0)
+    {
+        return cpus[cpuid()].sched.idle_proc;
+    }
+    // if (cpuid() != 0 && thisproc()->pid != -1)
+    // {
+    //     printk("pick_next executing on CPU %lld\n", cpuid());
+    // }
 
     if (panic_flag) {
         return cpus[cpuid()].sched.idle_proc;
     }
     acquire_spinlock(&run_queue_lock);
-    for (ListNode *p = run_queue.next; p != &run_queue; p = p->next) {
+    _for_in_list(p, &run_queue) {
         auto proc = container_of(p, Proc, schinfo.sched_node);
         if (proc->state == RUNNABLE) {
             release_spinlock(&run_queue_lock);
             return proc;
         }
     }
+    // for (ListNode *p = run_queue.next; p != &run_queue; p = p->next) {
+    //     auto proc = container_of(p, Proc, schinfo.sched_node);
+    //     if (proc->state == RUNNABLE) {
+    //         release_spinlock(&run_queue_lock);
+    //         return proc;
+    //     }
+    // }
     release_spinlock(&run_queue_lock);
     return cpus[cpuid()].sched.idle_proc;
 }

@@ -137,20 +137,29 @@ static void proc_test_1()
 
 void proc_test()
 {
-    printk("proc_test\n");
-    auto p = create_proc();
-    int pid = start_proc(p, proc_test_1, 0);
-    int t = 0;
-    while (1) {
-        int code;
-        int id = wait(&code);
-        if (id == -1)
-            break;
-        if (id == pid)
-            ASSERT(code == 0);
-        else
-            t |= 1 << (code - 20);
+    for (int round = 0; round < 1; round++)
+    {
+        printk("proc_test\n");
+        auto p = create_proc();
+        int pid = start_proc(p, proc_test_1, 0);
+        int t = 0;
+        while (1) {
+            int code;
+            int id = wait(&code);
+            if (id == -1)
+                break;
+            if (id == pid)
+            {  
+                if (code != 0)
+                {
+                    printk("pid %d exit with code %d\n", id, code);
+                }
+                ASSERT(code == 0);
+            }
+            else
+                t |= 1 << (code - 20);
+        }
+        ASSERT(t == 1048575);
+        printk("proc_test PASS %d\n", round);
     }
-    ASSERT(t == 1048575);
-    printk("proc_test PASS\n");
 }

@@ -1,3 +1,5 @@
-回收pid
+pick_next中如果不使用0号cpu，就可以多核跑，但是偶尔会有并发问题。
 
-如果kalloc有问题，可以直接使用kalloc_page
+进入test的核无法打印living
+
+poset_sem会被多次调用，打印同一个pid。（原来应该start_proc和activate_proc一一对应。）
