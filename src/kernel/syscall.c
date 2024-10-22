@@ -26,7 +26,7 @@ void syscall_entry(UserContext *context)
     // 检查系统调用号是否超出范围
     if (syscall_id >= NR_SYSCALL || syscall_table[syscall_id] == NULL) {
         printk("Invalid syscall ID: %llu\n", syscall_id);
-        panic("Syscall ID out of range");
+        PANIC();
     }
 
     // 提取系统调用参数，存储在 x0-x5

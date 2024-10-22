@@ -14,6 +14,6 @@ void release_sched_lock();
 void sched(enum procstate new_state);
 
 // MUST call lock_for_sched() before sched() !!!
-#define yield() (acquire_sched_lock(), sched(RUNNABLE))
+#define yield() (acquire_sched_lock(), printk("CPU: %lld yield acquired\n", cpuid()), sched(RUNNABLE))
 
 Proc *thisproc();

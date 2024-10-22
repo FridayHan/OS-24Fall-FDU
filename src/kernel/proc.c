@@ -55,6 +55,7 @@ void init_proc(Proc *p)
     init_list_node(&p->ptnode);
     init_schinfo(&p->schinfo);
     init_spinlock(&p->schinfo.lock);
+    init_pgdir(&p->pgdir);
 
     p->kstack = kalloc(KSTACK_SIZE);
     if (!p->kstack) {
@@ -140,8 +141,8 @@ int wait(int *exitcode)
 
     while (1)
     {
-        wait_sem(&p->childexit);
     wait_sem(&p->childexit);
+    printk("wait acquiring\n");
     acquire_sched_lock();
     _for_in_list(node, &p->children)
     {
@@ -185,6 +186,7 @@ NO_RETURN void exit(int code)
     Proc *p = thisproc();
     acquire_spinlock(&proc_lock);
     acquire_spinlock(&p->schinfo.lock);
+    printk("exit acquire_spinlock\n");
     acquire_sched_lock();
     p->exitcode = code;
 
@@ -206,6 +208,8 @@ NO_RETURN void exit(int code)
 
     post_sem(&p->parent->childexit);
 
+    free_pgdir(&p->pgdir);
+
     release_spinlock(&p->schinfo.lock);
     release_spinlock(&proc_lock);
     deallocate_pid(p->pid);
@@ -224,6 +228,8 @@ int kill(int pid)
     // Set the killed flag of the proc to true and return 0.
     // Return -1 if the pid is invalid (proc not found).
 
+    printk("kill PID: %d executing on CPU %lld\n", thisproc()->pid, cpuid());
+    printk("kill acquiring\n");
     acquire_sched_lock();
 
     ListNode queue;

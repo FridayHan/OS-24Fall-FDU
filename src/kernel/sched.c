@@ -34,6 +34,7 @@ void init_sched()
         p->state = RUNNING;
         p->parent = NULL;
         p->pid = -1;
+        p->killed = false;
         cpus[i].sched.idle_proc = cpus[i].sched.thisproc = p;
     }
 }
@@ -60,7 +61,7 @@ void acquire_sched_lock()
 
     // printk("Acquiring.\n");
     acquire_spinlock(&sched_lock);
-    // printk("Acquired.\n");
+    printk("Acquired.\n");
 }
 
 void release_sched_lock()
@@ -69,7 +70,7 @@ void release_sched_lock()
 
     // printk("Releasing.\n");
     release_spinlock(&sched_lock);
-    // printk("Released.\n");
+    printk("Released.\n");
 }
 
 bool is_zombie(Proc *p)
@@ -113,7 +114,7 @@ bool activate_proc(Proc *p)
     // }
 
     acquire_sched_lock();
-    // printk("activate_proc acquire_sched_lock\n");
+    printk("activate_proc acquire_sched_lock\n");
     // printk("activate_proc: PID %d\n", p->pid);
     if (p->state == RUNNING || p->state == RUNNABLE) {
         release_sched_lock();
@@ -159,10 +160,10 @@ static Proc *pick_next()
 {
     // TODO: if using template sched function, you should implement this routinue
     // choose the next process to run, and return idle if no runnable process
-    if (thisproc()->pid > 4 && cpuid() == 0)
-    {
-        return cpus[cpuid()].sched.idle_proc;
-    }
+    // if (thisproc()->pid > 4 && cpuid() == 0)
+    // {
+    //     return cpus[cpuid()].sched.idle_proc;
+    // }
     // if (cpuid() != 0 && thisproc()->pid != -1)
     // {
     //     printk("pick_next executing on CPU %lld\n", cpuid());
@@ -206,6 +207,7 @@ void sched(enum procstate new_state)
     auto this = thisproc();
 
     if (this->killed && new_state != ZOMBIE) {
+        release_sched_lock();
         return;
     }
     
