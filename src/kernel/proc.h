@@ -62,11 +62,8 @@ Proc *create_proc();
 int start_proc(Proc *, void (*entry)(u64), u64 arg);
 NO_RETURN void exit(int code);
 int wait(int *exitcode);
-<<<<<<< HEAD
 int kill(int pid);
-=======
 
 void init_pid_pool(int initial_pid_count);
 int allocate_pid();
 void deallocate_pid(int pid);
->>>>>>> lab2-dev

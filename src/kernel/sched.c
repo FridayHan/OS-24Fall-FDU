@@ -205,6 +205,10 @@ void sched(enum procstate new_state)
 {
     auto this = thisproc();
 
+    if (this->killed && new_state != ZOMBIE) {
+        return;
+    }
+    
     ASSERT(this->state == RUNNING);
     update_this_state(new_state);
     auto next = pick_next();

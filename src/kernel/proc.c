@@ -12,7 +12,6 @@ ListNode free_pid_list;
 static int next_pid = INITIAL_PID_COUNT;
 SpinLock pid_lock;
 SpinLock proc_lock;
-static int pid;
 // SpinLock proc_lock;
 
 void kernel_entry();
@@ -226,15 +225,23 @@ int kill(int pid)
     // Return -1 if the pid is invalid (proc not found).
 
     acquire_sched_lock();
-    _for_in_list(node, &root_proc.children)
-    {
-        // if (node == &root_proc.children)
-        //     continue;
+
+    ListNode queue;
+    init_list_node(&queue);
+    _insert_into_list(&queue, &root_proc.ptnode);
+
+    while (!_empty_list(&queue)) {
+        ListNode *node = queue.next;
         Proc *p = container_of(node, Proc, ptnode);
-        if (p->pid == pid) {
+        if (p->pid == pid && p->state != UNUSED) {
             p->killed = true;
+            activate_proc(p);
             release_sched_lock();
             return 0;
+        }
+
+        _for_in_list(node, &p->children) {
+            _insert_into_list(&queue, node);
         }
     }
     release_sched_lock();
