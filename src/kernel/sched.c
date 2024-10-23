@@ -52,6 +52,8 @@ void init_schinfo(struct schinfo *p)
     // TODO: initialize your customized schinfo for every newly-created process
 
     init_list_node(&p->sched_node);
+    init_list_node(&p->kill_node);
+    init_spinlock(&p->lock);
     p->in_run_queue = false;
 }
 

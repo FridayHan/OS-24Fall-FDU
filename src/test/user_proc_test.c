@@ -86,8 +86,10 @@ void user_proc_test()
     }
     ASSERT(wait_sem(&myrepot_done));
     printk("done\n");
-    for (int i = 0; i < 22; i++)
+    for (int i = 0; i < 22; i++) {
+        printk("TEST: kill %d\n", pids[i]);
         ASSERT(kill(pids[i]) == 0);
+    }
     for (int i = 0; i < 22; i++) {
         int code;
         int pid = wait(&code);

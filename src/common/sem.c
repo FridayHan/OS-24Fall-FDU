@@ -13,13 +13,11 @@ void init_sem(Semaphore *sem, int val)
 
 void _lock_sem(Semaphore *sem)
 {
-    printk("lock_sem acquiring\n");
     acquire_spinlock(&sem->lock);
 }
 
 void _unlock_sem(Semaphore *sem)
 {
-    printk("lock_sem releasing\n");
     release_spinlock(&sem->lock);
 }
 
@@ -63,7 +61,6 @@ int post_all_sem(Semaphore *sem)
 
 bool _wait_sem(Semaphore *sem)
 {
-    acquire_spinlock(&sem->lock);
     if (--sem->val >= 0) {
         release_spinlock(&sem->lock);
         return true;

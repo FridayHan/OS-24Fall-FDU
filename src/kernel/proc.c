@@ -54,7 +54,6 @@ void init_proc(Proc *p)
     init_list_node(&p->children);
     init_list_node(&p->ptnode);
     init_schinfo(&p->schinfo);
-    init_spinlock(&p->schinfo.lock);
     init_pgdir(&p->pgdir);
 
     p->kstack = kalloc(KSTACK_SIZE);
@@ -80,6 +79,7 @@ void set_parent_to_this(Proc *proc)
 
     acquire_spinlock(&proc->schinfo.lock);
     proc->parent = thisproc();
+    ASSERT(proc->pid != 0);
     _insert_into_list(&thisproc()->children, &proc->ptnode);
     release_spinlock(&proc->schinfo.lock);
 }
@@ -199,6 +199,7 @@ NO_RETURN void exit(int code)
         cp->parent = &root_proc;
         release_spinlock(&cp->schinfo.lock);
         acquire_spinlock(&root_proc.schinfo.lock);
+        ASSERT(cp->pid != 0);
         _insert_into_list(&root_proc.children, node);
         release_spinlock(&root_proc.schinfo.lock);
         if (is_zombie(cp)) {
@@ -228,27 +229,52 @@ int kill(int pid)
     // Set the killed flag of the proc to true and return 0.
     // Return -1 if the pid is invalid (proc not found).
 
-    printk("kill PID: %d executing on CPU %lld\n", thisproc()->pid, cpuid());
+    printk("kill PID: %d executing on CPU %lld\n", pid, cpuid());
     printk("kill acquiring\n");
     acquire_sched_lock();
 
     ListNode queue;
     init_list_node(&queue);
-    _insert_into_list(&queue, &root_proc.ptnode);
+    _insert_into_list(&queue, &root_proc.schinfo.kill_node);
+
+    // // experiment
+    // _for_in_list(node, &root_proc.children) {
+    //     printk("root_proc child PID: %d\n", container_of(node, Proc, ptnode)->pid);
+    // }
+
+    // _insert_into_list(&queue, root_proc.children.next);
+    // _detach_from_list(root_proc.children.next);
+    // printk("kill PID: %d\n", pid);
+    // printk("detached PID: %d\n", container_of(root_proc.children.next, Proc, ptnode)->pid);
+
+    // _for_in_list(node, &root_proc.children) {
+    //     printk("root_proc child PID: %d\n", container_of(node, Proc, ptnode)->pid);
+    // }
 
     while (!_empty_list(&queue)) {
         ListNode *node = queue.next;
-        Proc *p = container_of(node, Proc, ptnode);
+        Proc *p = container_of(node, Proc, schinfo.kill_node);
         if (p->pid == pid && p->state != UNUSED) {
+            acquire_spinlock(&p->schinfo.lock);
             p->killed = true;
-            activate_proc(p);
+            release_spinlock(&p->schinfo.lock);
             release_sched_lock();
+
+            activate_proc(p);
             return 0;
         }
+        printk("AAPID: %d\n", p->pid);
 
-        _for_in_list(node, &p->children) {
-            _insert_into_list(&queue, node);
+        _for_in_list(node2, &p->children) {
+            Proc *p0 = container_of(node2, Proc, ptnode);
+            if (p0->pid == p->pid || p0->pid < 0) {
+                continue;
+            }
+            ListNode *kill_node = &p0->schinfo.kill_node;
+            printk("PID: %d\n", p0->pid);
+            _insert_into_list(&queue, kill_node);
         }
+        _detach_from_list(node);
     }
     release_sched_lock();
     return -1;

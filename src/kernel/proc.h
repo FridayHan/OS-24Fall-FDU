@@ -32,6 +32,7 @@ struct schinfo {
     ListNode sched_node;    // 调度队列节点
     bool in_run_queue;    // 是否在就绪队列中
     SpinLock lock;
+    ListNode kill_node;
 };
 
 typedef struct Proc {
