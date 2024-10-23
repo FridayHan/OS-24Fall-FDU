@@ -20,12 +20,12 @@ PTEntriesPtr get_pte(struct pgdir *pgdir, u64 va, bool alloc)
     // If the entry not exists (NEEDN'T BE VALID), allocate it if alloc=true, or return NULL if false.
     // THIS ROUTINUE GETS THE PTE, NOT THE PAGE DESCRIBED BY PTE.
 
+    // 分配根页表
     if (!pgdir->pt) {
         if (!alloc) return NULL;
-        // 如果根页表还没有分配，且alloc为真，则分配根页表
         pgdir->pt = (PTEntriesPtr)kalloc_page();
-        if (!pgdir->pt) return NULL;  // 分配失败
-        memset(pgdir->pt, 0, PAGE_SIZE);  // 初始化页表为0
+        if (!pgdir->pt) return NULL;
+        memset(pgdir->pt, 0, PAGE_SIZE);
     }
 
     PTEntriesPtr table = pgdir->pt;
@@ -38,9 +38,10 @@ PTEntriesPtr get_pte(struct pgdir *pgdir, u64 va, bool alloc)
         // 分配第1级页表
         table[idx] = (u64)kalloc_page() | PTE_TABLE | PTE_VALID;
         if (!(table[idx] & PTE_VALID)) return NULL;  // 分配失败
-        memset((void*)PTE_ADDRESS(table[idx]), 0, PAGE_SIZE);  // 初始化为0
+        void* table_address = (void*)P2K(PTE_ADDRESS(table[idx]));
+        memset(table_address, 0, PAGE_SIZE);  // 初始化为0
     }
-    table = (PTEntriesPtr)PTE_ADDRESS(table[idx]);
+    table = (PTEntriesPtr)P2K(PTE_ADDRESS(table[idx]));
 
     // 第1级页表
     idx = VA_PART1(va);
@@ -48,9 +49,9 @@ PTEntriesPtr get_pte(struct pgdir *pgdir, u64 va, bool alloc)
         if (!alloc) return NULL;
         table[idx] = (u64)kalloc_page() | PTE_TABLE | PTE_VALID;
         if (!(table[idx] & PTE_VALID)) return NULL;  // 分配失败
-        memset((void*)PTE_ADDRESS(table[idx]), 0, PAGE_SIZE);
+        memset((void*)P2K(PTE_ADDRESS(table[idx])), 0, PAGE_SIZE);
     }
-    table = (PTEntriesPtr)PTE_ADDRESS(table[idx]);
+    table = (PTEntriesPtr)P2K(PTE_ADDRESS(table[idx]));
 
     // 第2级页表
     idx = VA_PART2(va);
@@ -58,15 +59,17 @@ PTEntriesPtr get_pte(struct pgdir *pgdir, u64 va, bool alloc)
         if (!alloc) return NULL;
         table[idx] = (u64)kalloc_page() | PTE_TABLE | PTE_VALID;
         if (!(table[idx] & PTE_VALID)) return NULL;  // 分配失败
-        memset((void*)PTE_ADDRESS(table[idx]), 0, PAGE_SIZE);
+        memset((void*)P2K(PTE_ADDRESS(table[idx])), 0, PAGE_SIZE);
     }
-    table = (PTEntriesPtr)PTE_ADDRESS(table[idx]);
+    table = (PTEntriesPtr)P2K(PTE_ADDRESS(table[idx]));
 
     // 第3级页表
     idx = VA_PART3(va);
     if (!(table[idx] & PTE_VALID)) {
         if (!alloc) return NULL;
-        table[idx] = 0;  // 创建一个空的PTE，无需分配物理内存
+        u64 phys_page = (u64)kalloc_page();  // 分配物理页面
+        if (!phys_page) return NULL;  // 分配失败
+        table[idx] = phys_page | PTE_PAGE | PTE_VALID | PTE_RW;  // 设置页表项为有效并映射物理页面
     }
 
     // 返回指向该页表项的指针
@@ -89,22 +92,23 @@ void free_pgdir(struct pgdir *pgdir)
     // 遍历并释放各级页表
     for (int i = 0; i < N_PTE_PER_TABLE; i++) {
         if (pgdir->pt[i] & PTE_VALID) {
-            PTEntriesPtr table1 = (PTEntriesPtr)PTE_ADDRESS(pgdir->pt[i]);
+            PTEntriesPtr table1 = (PTEntriesPtr)P2K(PTE_ADDRESS(pgdir->pt[i]));
 
             // 第1级页表
             for (int j = 0; j < N_PTE_PER_TABLE; j++) {
                 if (table1[j] & PTE_VALID) {
-                    PTEntriesPtr table2 = (PTEntriesPtr)PTE_ADDRESS(table1[j]);
+                    PTEntriesPtr table2 = (PTEntriesPtr)P2K(PTE_ADDRESS(table1[j]));
 
                     // 第2级页表
                     for (int k = 0; k < N_PTE_PER_TABLE; k++) {
                         if (table2[k] & PTE_VALID) {
-                            PTEntriesPtr table3 = (PTEntriesPtr)PTE_ADDRESS(table2[k]);
+                            PTEntriesPtr table3 = (PTEntriesPtr)P2K(PTE_ADDRESS(table2[k]));
 
                             // 第3级页表
                             for (int l = 0; l < N_PTE_PER_TABLE; l++) {
                                 if (table3[l] & PTE_VALID) {
                                     // 第3级页表项有效，不释放物理页，只释放页表本身
+                                    kfree_page((void*)P2K(PTE_ADDRESS(table3[l]))); // ???
                                 }
                             }
                             // 释放第3级页表

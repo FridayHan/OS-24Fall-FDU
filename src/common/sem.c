@@ -13,11 +13,13 @@ void init_sem(Semaphore *sem, int val)
 
 void _lock_sem(Semaphore *sem)
 {
+    printk("lock_sem acquiring\n");
     acquire_spinlock(&sem->lock);
 }
 
 void _unlock_sem(Semaphore *sem)
 {
+    printk("lock_sem releasing\n");
     release_spinlock(&sem->lock);
 }
 
@@ -70,7 +72,6 @@ bool _wait_sem(Semaphore *sem)
     wait->proc = thisproc();
     wait->up = false;
     _insert_into_list(&sem->sleeplist, &wait->slnode);
-    printk("wait_sem acquiring\n");
     acquire_sched_lock();
     release_spinlock(&sem->lock);
     sched(SLEEPING);

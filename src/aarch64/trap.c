@@ -33,8 +33,24 @@ void trap_global_handler(UserContext *context)
     case ESR_EC_IABORT_EL1:
     case ESR_EC_DABORT_EL0:
     case ESR_EC_DABORT_EL1: {
-        printk("cpuid: %lld\n", cpuid());
-        printk("Page fault\n");
+        // printk("Page fault\n");
+        u64 fsc = iss & 0x3F;  // Fault Status Code (FSC) 位[5:0]
+
+        printk("Page fault occurred! FSC code: %llu\n", fsc);
+        switch (fsc) {
+        case 0b000001: printk("Address size fault at level 0\n"); break;
+        case 0b000011: printk("Address size fault at level 1\n"); break;
+        case 0b000101: printk("Address size fault at level 2\n"); break;
+        case 0b000111: printk("Address size fault at level 3\n"); break;
+        case 0b010000: printk("Access flag fault at level 1\n"); break;
+        case 0b010001: printk("Access flag fault at level 2\n"); break;
+        case 0b010010: printk("Access flag fault at level 3\n"); break;
+        case 0b100001: printk("Translation fault at level 0\n"); break;
+        case 0b100011: printk("Translation fault at level 1\n"); break;
+        case 0b100101: printk("Translation fault at level 2\n"); break;
+        case 0b100111: printk("Translation fault at level 3\n"); break;
+        default: printk("Unknown FSC code: %llu\n", fsc); break;
+        }
         PANIC();
     } break;
     default: {

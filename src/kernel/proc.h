@@ -12,7 +12,7 @@ enum procstate { UNUSED, RUNNABLE, RUNNING, SLEEPING, ZOMBIE };
 typedef struct UserContext {
     // TODO: customize your trap frame
     u64 spsr, elr, sp;
-    u64 x[18]; // x0-x18
+    u64 x[18]; // x0-x17
 } UserContext;
 
 typedef struct KernelContext {
