@@ -70,6 +70,7 @@ bool _wait_sem(Semaphore *sem)
     wait->proc = thisproc();
     wait->up = false;
     _insert_into_list(&sem->sleeplist, &wait->slnode);
+    // printk("_wait_sem acquiring\n");
     acquire_sched_lock();
     release_spinlock(&sem->lock);
     sched(SLEEPING);

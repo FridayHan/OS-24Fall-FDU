@@ -20,7 +20,7 @@ void syscall_entry(UserContext *context)
     // id is stored in x8. args are stored in x0-x5. return value is stored in x0.
     // be sure to check the range of id. if id >= NR_SYSCALL, panic.
 
-    printk("syscall_entry\n");
+    // printk("syscall_entry\n");
     u64 syscall_id = context->x[8];
     if (syscall_id >= NR_SYSCALL || syscall_table[syscall_id] == NULL) {
         printk("Invalid syscall ID: %llu\n", syscall_id);
