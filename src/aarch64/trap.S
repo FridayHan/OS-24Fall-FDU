@@ -19,8 +19,14 @@ pushp(x0, x1)
 mrs x0, spsr_el1
 mrs x1, elr_el1
 pushp(x0, x1)
-mov x0, sp
 
+// mov x0, sp
+
+mov x0, sp
+sub sp, sp, #0x10
+str x0, [sp]
+
+mov x0, sp
 bl trap_global_handler
 
 
@@ -28,12 +34,15 @@ bl trap_global_handler
 trap_return:
 // TODO: restore UserContext
 
+ldr x0, [sp], #0x10   // 恢复 sp（从内存中加载栈指针）
+mov sp, x0            // 将 x0 中的值恢复到 sp
+
 popp(x0, x1)
 
 msr spsr_el1, x0
 msr elr_el1, x1
 
-
+popp(x0, x1)
 popp(x2, x3)
 popp(x4, x5)
 popp(x6, x7)
