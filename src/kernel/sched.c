@@ -147,11 +147,11 @@ static Proc *pick_next()
         auto proc = container_of(p, Proc, schinfo.sched_node);
         if (proc->state == RUNNABLE) {
             release_spinlock(&run_queue_lock);
-            printk("PICK: pid: %d, cpuid: %lld\n", proc->pid, cpuid());
+            // printk("PICK: pid: %d, cpuid: %lld\n", proc->pid, cpuid());
             return proc;
         }
     }
-    printk("PICK: pid: -1, cpuid: %lld\n", cpuid());
+    // printk("PICK: pid: -1, cpuid: %lld\n", cpuid());
     release_spinlock(&run_queue_lock);
     return cpus[cpuid()].sched.idle_proc;
 }
