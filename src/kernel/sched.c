@@ -149,10 +149,10 @@ static Proc *pick_next()
 {
     // TODO: if using template sched function, you should implement this routinue
     // choose the next process to run, and return idle if no runnable process
-    if (thisproc()->pid > 4 && cpuid() == 0)
-    {
-        return cpus[cpuid()].sched.idle_proc;
-    }
+    // if (thisproc()->pid > 4 && cpuid() == 0)
+    // {
+    //     return cpus[cpuid()].sched.idle_proc;
+    // }
     // if (cpuid() != 0 && thisproc()->pid != -1)
     // {
     //     printk("pick_next executing on CPU %lld\n", cpuid());
@@ -194,7 +194,7 @@ static void update_this_proc(Proc *p)
 void sched(enum procstate new_state)
 {
     auto this = thisproc();
-
+    printk("sched: PID %d\n", this->pid);
     ASSERT(this->state == RUNNING);
     update_this_state(new_state);
     auto next = pick_next();

@@ -51,7 +51,7 @@ void init_proc(Proc *p)
     init_list_node(&p->children);
     init_list_node(&p->ptnode);
     init_schinfo(&p->schinfo);
-    init_spinlock(&p->schinfo.lock);
+    // init_spinlock(&p->schinfo.lock);
 
     p->kstack = kalloc(KSTACK_SIZE);
     if (!p->kstack) {
@@ -74,10 +74,12 @@ void set_parent_to_this(Proc *proc)
     // NOTE: maybe you need to lock the process tree
     // NOTE: it's ensured that the old proc->parent = NULL
 
-    acquire_spinlock(&proc->schinfo.lock);
+    // acquire_spinlock(&proc->schinfo.lock);
+    acquire_spinlock(&proc_lock);
     proc->parent = thisproc();
     _insert_into_list(&thisproc()->children, &proc->ptnode);
-    release_spinlock(&proc->schinfo.lock);
+    // release_spinlock(&proc->schinfo.lock);
+    release_spinlock(&proc_lock);
 }
 
 int start_proc(Proc *p, void (*entry)(u64), u64 arg)
@@ -89,13 +91,15 @@ int start_proc(Proc *p, void (*entry)(u64), u64 arg)
     // NOTE: be careful of concurrency
     
     if (p->parent == NULL) {
-        acquire_spinlock(&p->schinfo.lock);
-        acquire_spinlock(&root_proc.schinfo.lock);
+        // acquire_spinlock(&p->schinfo.lock);
+        // acquire_spinlock(&root_proc.schinfo.lock);
+        acquire_spinlock(&proc_lock);
         p->parent = &root_proc;
         _insert_into_list(&root_proc.children, &p->ptnode);
         // printk("Parent: %d, Child: %d\n", 0, p->pid);
-        release_spinlock(&root_proc.schinfo.lock);
-        release_spinlock(&p->schinfo.lock);
+        // release_spinlock(&root_proc.schinfo.lock);
+        // release_spinlock(&p->schinfo.lock);
+        release_spinlock(&proc_lock);
     }
 
     // printk("start_proc: PID: %d\n", p->pid);
@@ -135,7 +139,7 @@ int wait(int *exitcode)
 
     // wait_sem(&p->childexit);
 
-    while (1)
+    // while (1)
     {
         wait_sem(&p->childexit);
     _for_in_list(node, &p->children)
@@ -143,16 +147,16 @@ int wait(int *exitcode)
         Proc *cp = container_of(node, Proc, ptnode);
         if (is_zombie(cp)) {
             int pid = cp->pid;
-            acquire_spinlock(&p->schinfo.lock);
+            // acquire_spinlock(&p->schinfo.lock);
+            acquire_spinlock(&proc_lock);
             _detach_from_list(node);
-            release_spinlock(&p->schinfo.lock);
-            // acquire_spinlock(&proc_lock);
+            // release_spinlock(&p->schinfo.lock);
             if (exitcode) {
                 *exitcode = cp->exitcode;
             }
             kfree(cp->kstack);
             kfree(cp);
-            // release_spinlock(&proc_lock);
+            release_spinlock(&proc_lock);
             return pid;
         }
     }
@@ -178,20 +182,20 @@ NO_RETURN void exit(int code)
 
     Proc *p = thisproc();
     acquire_spinlock(&proc_lock);
-    acquire_spinlock(&p->schinfo.lock);
+    // acquire_spinlock(&p->schinfo.lock);
     p->exitcode = code;
 
     printk("exit: PID: %d, cpuid: %lld\n", p->pid, cpuid());
     while(!_empty_list(&p->children)) {
         ListNode *node = p->children.next;
         Proc *cp = container_of(node, Proc, ptnode);
-        acquire_spinlock(&cp->schinfo.lock);
+        // acquire_spinlock(&cp->schinfo.lock);
         _detach_from_list(node);
         cp->parent = &root_proc;
-        release_spinlock(&cp->schinfo.lock);
-        acquire_spinlock(&root_proc.schinfo.lock);
+        // release_spinlock(&cp->schinfo.lock);
+        // acquire_spinlock(&root_proc.schinfo.lock);
         _insert_into_list(&root_proc.children, node);
-        release_spinlock(&root_proc.schinfo.lock);
+        // release_spinlock(&root_proc.schinfo.lock);
         if (is_zombie(cp)) {
             post_sem(&root_proc.childexit);
         }
@@ -199,7 +203,7 @@ NO_RETURN void exit(int code)
 
     post_sem(&p->parent->childexit);
 
-    release_spinlock(&p->schinfo.lock);
+    // release_spinlock(&p->schinfo.lock);
     release_spinlock(&proc_lock);
     deallocate_pid(p->pid);
     acquire_sched_lock();
