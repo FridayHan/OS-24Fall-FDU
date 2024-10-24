@@ -23,7 +23,7 @@ static void __timer_set_clock()
 {
     auto node = _rb_first(&cpus[cpuid()].timer);
     if (!node) {
-        printk("cpu %lld set clock 1000, no timer left\n", cpuid());
+        // printk("cpu %lld set clock 1000, no timer left\n", cpuid());
         reset_clock(1000);
         return;
     }
@@ -33,7 +33,7 @@ static void __timer_set_clock()
         reset_clock(0);
     else
         reset_clock(t1 - t0);
-    printk("cpu %lld set clock %lld\n", cpuid(), t1 - t0);
+    // printk("cpu %lld set clock %lld\n", cpuid(), t1 - t0);
 }
 
 static void timer_clock_handler()
