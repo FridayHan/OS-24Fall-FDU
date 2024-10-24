@@ -30,11 +30,13 @@ void init_sched()
         if (!p) {
             PANIC();
         }
+        memset(p, 0, sizeof(Proc));
         p->idle = 1;
         p->state = RUNNING;
         p->parent = NULL;
         p->pid = -1;
         p->killed = false;
+        p->parent = NULL;
         cpus[i].sched.idle_proc = cpus[i].sched.thisproc = p;
     }
 }
@@ -147,6 +149,8 @@ static void update_this_state(enum procstate new_state)
     //     printk("update_this_state executing on CPU %lld\n", cpuid());
     // }
 
+    
+    // ASSERT(thisproc()->state == RUNNABLE || thisproc()->state == RUNNING);
     thisproc()->state = new_state;
     if (new_state == SLEEPING || new_state == ZOMBIE) {
         if (thisproc()->schinfo.in_run_queue) {
@@ -179,6 +183,7 @@ static Proc *pick_next()
         auto proc = container_of(p, Proc, schinfo.sched_node);
         if (proc->state == RUNNABLE) {
             release_spinlock(&run_queue_lock);
+            // printk("PICK: pid: %d, cpuid: %lld\n", proc->pid, cpuid());
             return proc;
         }
     }
@@ -189,6 +194,7 @@ static Proc *pick_next()
     //         return proc;
     //     }
     // }
+    // printk("PICK: pid: -1, cpuid: %lld\n", cpuid());
     release_spinlock(&run_queue_lock);
     return cpus[cpuid()].sched.idle_proc;
 }
