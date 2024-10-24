@@ -4,257 +4,419 @@
 #include <driver/memlayout.h>
 #include <kernel/mem.h>
 #include <kernel/printk.h>
-#include <common/list.h>
-#include <common/string.h>
+
+#define Slab_division 4
 
 RefCount kalloc_page_cnt;
 
-static PagedAllocator allocator;
+void *nowAvailable;
+int free_couter = 0;
+SpinLock lock;
 
-static Page* free_pages = NULL;
-static SpinLock free_pages_lock;
+int upper_log2(unsigned long long n)
+{
+    int result = 0;
 
-u16 align_size(u16 size) {
-    for (int i = 0; i < MAX_SIZE_CLASS; i++) {
-        if (size <= size_classes[i]) {
-            return size_classes[i];
-        }
+    while (n > 0) {
+        n >>= 1;
+        result++;
     }
-    // 默认对齐到最大的大小类别
-    return size_classes[MAX_SIZE_CLASS - 1];
-    // 简洁但可维护性差的实现
-    // return round_up(size, 8);
+    return result;
 }
 
-int get_size_class(u16 size) {
-    for (int i = 0; i < MAX_SIZE_CLASS; i++) {
-        if (size <= size_classes[i]) {
-            return i;
-        }
-    }
-    return -1;
-    // 简洁但可维护性差的实现
-    // if (size <= 8)
-    //     return 0;
-    // return 61 - __builtin_clzll(size - 1);
+void *nowAvailable2;
+int free_counter2 = 0;
+SpinLock lock2;
+int PAGE_SIZE2 = 4096 * 2 * 2 * 2;
+int division = 2048;
+
+static inline void *Slab_start2(void *x)
+{
+    int k = upper_log2(PAGE_SIZE2) - 1;
+    return ((void *)(((u64)x >> k) << k));
 }
+
+void *Slab_config[10 * Slab_division];
+// stores the start address of available address
+SpinLock locks[10 * Slab_division];
+// when accessing the slab config, ask for its corresponding lock
 
 void kinit()
 {
     init_rc(&kalloc_page_cnt);
-    init_spinlock(&free_pages_lock);
-    acquire_spinlock(&free_pages_lock);
+    extern char end[];
+    int page_number = (int)(((char *)PHYSTOP - end) / PAGE_SIZE);
+    nowAvailable =
+            (void *)(P2K((void *)((char *)PHYSTOP - page_number * PAGE_SIZE)));
+    nowAvailable2 = (void *)(P2K((void *)((char *)PHYSTOP - PAGE_SIZE2)));
 
-    // 初始化allocator
-    for (int i = 0; i < MAX_SIZE_CLASS; i++) {
-        allocator.free_pages[i] = NULL;
-        init_spinlock(&allocator.locks[i]);
-    }
-    
-    // 初始化free_pages
-    u64 start_addr = (round_up((u64)end, PAGE_SIZE)); // 可分配物理页的起始地址
-    for (u64 addr = start_addr; addr < P2K(PHYSTOP); addr += PAGE_SIZE) {
-        Page* new_page = (Page*)addr;
-        new_page->free_list_num = 0;
-        new_page->block_size = 0;
-        new_page->free_list_offset = 0;
-        // 将新页插入到free_pages
-        new_page->next = free_pages;
-        free_pages = new_page;
-    }
+    init_spinlock(&lock);
+    init_spinlock(&lock2);
 
-    release_spinlock(&free_pages_lock);
-    return;
-}
-
-void kinit_page(Page* page, u16 block_size)
-{
-    // ERROR: 检查页是否为空
-    if (!page) {
-        printk("kinit_page: Attempted to initialize a NULL page.\n");
-        return;
+    for (int i = 0; i < 10; i++) {
+        init_spinlock(&locks[i]);
+        Slab_config[i] = NULL;
     }
-
-    int size_class = get_size_class(block_size);
-    page->free_list_num = (USABLE_PAGE_SIZE(block_size)) / block_size;
-    page->block_size = block_size;
-    page->free_list_offset = 0;
-    page->next = NULL;
-
-    // 初始化页内的自由块链表
-    u16 block_offset = (u16)round_up((u64)(sizeof(Page)), (u64)block_size);
-    for (int i = 0; i < page->free_list_num; i++) {
-        *(u16*)((char*)page + block_offset) = page->free_list_offset;
-        page->free_list_offset = (u16)block_offset;
-        block_offset += block_size;
-    }
-    
-    // 将新页插入到对应大小类别的自由列表
-    page->prev = NULL;
-    page->next = allocator.free_pages[size_class];
-    if (allocator.free_pages[size_class]) {
-        allocator.free_pages[size_class]->prev = page;
-    }
-    allocator.free_pages[size_class] = page;
-    page->in_free_list = true;
-    return;
 }
 
 void *kalloc_page()
 {
     increment_rc(&kalloc_page_cnt);
-    acquire_spinlock(&free_pages_lock);
 
-    // ERROR: 检查是否有空闲页
-    if (free_pages == NULL) {
-        printk("kalloc_page: Out of memory.\n");
-        return NULL;
+    acquire_spinlock(&lock);
+    void *result = nowAvailable;
+    if (!free_couter) {
+        nowAvailable = (void *)((char *)nowAvailable + PAGE_SIZE);
+    } else {
+        nowAvailable = (void *)(*(u64 *)nowAvailable);
+        free_couter--;
     }
-    
-    // 取出一个空闲物理页
-    Page* allocated_page = free_pages;
-    free_pages = free_pages->next;
-    allocated_page->next = NULL;
+    release_spinlock(&lock);
+    // printk("page1 %p is allocated\n", result);
 
-    release_spinlock(&free_pages_lock);
-    return (void*)allocated_page;
+    return result;
+}
+
+void *kalloc_page2()
+{
+    int k = PAGE_SIZE2 / PAGE_SIZE;
+    for (int i = 0; i < k; i++) {
+        increment_rc(&kalloc_page_cnt);
+    }
+
+    acquire_spinlock(&lock2);
+    void *result = nowAvailable2;
+    if (!free_counter2) {
+        nowAvailable2 = (void *)((char *)nowAvailable2 - PAGE_SIZE2);
+    } else {
+        nowAvailable2 = (void *)(*(u64 *)nowAvailable2);
+        free_counter2--;
+    }
+    release_spinlock(&lock2);
+    // printk("page2 %p is allocated\n", result);
+
+    return result;
 }
 
 void kfree_page(void *p)
 {
     decrement_rc(&kalloc_page_cnt);
-    acquire_spinlock(&free_pages_lock);
 
-    // ERROR: 检查释放的页是否合法
-    if ((u64)p % PAGE_SIZE != 0) {
-        printk("kfree_page: Attempted to free a non-page-aligned pointer.\n");
-        return;
-    }
+    acquire_spinlock(&lock);
+    free_couter++;
 
-    // 将页插入到空闲页链表
-    Page* page = (Page*)(u64)p;
-    page->next = free_pages;
-    free_pages = page;
+    void *next = nowAvailable;
+    nowAvailable = p;
+    *(u64 *)nowAvailable = (u64)next;
+    release_spinlock(&lock);
+    // printk("page1 %p is allocated\n", p);
 
-    release_spinlock(&free_pages_lock);
     return;
 }
 
-void *kalloc(u16 size)
+void kfree_page2(void *p)
 {
-    // ERROR: 检查请求的大小是否合法
-    if (size == 0 || size > PAGE_SIZE / 2) {
-        printk("kalloc error: size error. Requested size: %u.\n", size);
+    int k = PAGE_SIZE2 / PAGE_SIZE;
+    for (int i = 0; i < k; i++) {
+        decrement_rc(&kalloc_page_cnt);
+    }
+
+    acquire_spinlock(&lock2);
+    free_counter2++;
+
+    void *next = nowAvailable2;
+    nowAvailable2 = p;
+    *(u64 *)nowAvailable2 = (u64)next;
+    release_spinlock(&lock2);
+    // printk("page2 %p is allocated\n", p);
+
+    return;
+}
+
+int exp2(int x)
+{
+    int result = 1;
+    while (x > 0) {
+        x--;
+        result <<= 1;
+    }
+    return result;
+}
+
+static inline void *get_header(void *start)
+{
+    return ((void *)(*(u64 *)start));
+}
+
+void init_slab(void *start, int unit_size, short id)
+{
+    *(u64 *)start = ((u64)((char *)start + 32) | 1); // init nowAvailable
+    int *unit = (int *)((char *)start + 8);
+    *unit = unit_size; // unit_size setting
+    short *a = (short *)((char *)start + 12);
+    *a = 0;
+    *(a + 1) = id;
+    u64 *next = (u64 *)((char *)start + 16);
+    *next = 0; // next slab setting
+    *(next + 1) = 0;
+}
+
+static inline void *Slab_start(void *x)
+{
+    return ((void *)(((u64)x >> 12) << 12));
+}
+
+static inline void *Get_Available(void *start)
+{
+    return (void *)(((u64)get_header(start)) & ~1ULL);
+}
+
+static inline int whether_available(void *start)
+{
+    return (int)(((u64)get_header(start)) & 1);
+}
+static inline void set_whether_available(void *start)
+{
+    *(u64 *)start |= 1;
+}
+static inline void clear_whether_available(void *start)
+{
+    *(u64 *)start &= ~1ULL;
+}
+
+static inline int Get_UnitSize(void *start)
+{
+    return (*(int *)((char *)start + 8));
+}
+
+static inline short *Get_FreeCounter(void *start)
+{
+    return ((short *)((char *)start + 12));
+}
+
+static inline void set_Available(void *start, void *next)
+{
+    int a = whether_available(start);
+    *(u64 *)start = ((u64)next | a);
+}
+
+static inline void *Get_tail(void *start)
+{
+    return (void *)(*(u64 *)((char *)start + 16));
+}
+
+static inline int Get_remain(void *start)
+{
+    return (int)(((u64)Get_tail(start)) & 0xFFF);
+}
+
+static inline void *Get_NextSlab(void *start)
+{
+    return (void *)(((u64)Get_tail(start)) & ~0xFFF);
+}
+
+static inline void *Get_PrevSlab(void *start)
+{
+    return (void *)(*(u64 *)((char *)start + 24));
+}
+
+static inline void Add_remain(void *start)
+{
+    int new = Get_remain(start);
+    new ++;
+    void *next = Get_NextSlab(start);
+    *(u64 *)((char *)start + 16) = ((u64)next | new);
+}
+
+static inline void Minus_remain(void *start)
+{
+    int new = Get_remain(start);
+    new --;
+    void *next = Get_NextSlab(start);
+    *(u64 *)((char *)start + 16) = ((u64)next | new);
+}
+
+static inline void set_slab_next(void *start, void *next)
+{
+    int remain = Get_remain(start);
+    *(u64 *)((char *)start + 16) = ((u64)next | remain);
+}
+
+static inline void set_slab_prev(void *start, void *next)
+{
+    *(u64 *)((char *)start + 24) = (u64)next;
+}
+
+static inline void *start_BGE_512(void *ptr)
+{
+    return (void *)(*((u64 *)ptr - 1));
+}
+
+static inline int get_id(void *start)
+{
+    return (int)(*(short *)((char *)start + 14));
+}
+
+void *find_slab_element(void *start)
+{
+    void *result = Get_Available(start);
+    short *slab_free_counter = Get_FreeCounter(start);
+    int unit_size = Get_UnitSize(start);
+
+    Add_remain(start);
+    int slab_id = get_id(start);
+
+    if (!(*slab_free_counter)) {
+        void *next = (void *)((char *)result + unit_size);
+
+        if (Slab_start((void *)((char *)next + unit_size - 1)) !=
+            Slab_start(result)) {
+            next = NULL;
+            clear_whether_available(start);
+            Slab_config[slab_id] = Get_NextSlab(start);
+            if (Slab_config[slab_id])
+                set_slab_prev(Slab_config[slab_id], NULL);
+        }
+        set_Available(start, next);
+    } else {
+        (*slab_free_counter)--;
+        void *next = (void *)(*(u64 *)result);
+        if (next == NULL) {
+            clear_whether_available(start);
+            Slab_config[slab_id] = Get_NextSlab(start);
+            if (Slab_config[slab_id])
+                set_slab_prev(Slab_config[slab_id], NULL);
+        }
+        set_Available(start, next);
+    }
+    return result;
+}
+
+void *find_slab_element2(void *start)
+{
+    void *result = Get_Available(start);
+    short *slab_free_counter = Get_FreeCounter(start);
+    int unit_size = Get_UnitSize(start);
+
+    Add_remain(start);
+    int slab_id = get_id(start);
+
+    if (!(*slab_free_counter)) {
+        void *next = (void *)((char *)result + unit_size);
+
+        if (Slab_start2((void *)((char *)next + unit_size - 1)) !=
+            Slab_start2(result)) {
+            // printk("full!\n");
+            next = NULL;
+            clear_whether_available(start);
+            Slab_config[slab_id] = Get_NextSlab(start);
+            if (Slab_config[slab_id])
+                set_slab_prev(Slab_config[slab_id], NULL);
+        }
+        set_Available(start, next);
+    } else {
+        (*slab_free_counter)--;
+        void *next = (void *)(*(u64 *)result);
+        if (next == NULL) {
+            clear_whether_available(start);
+            Slab_config[slab_id] = Get_NextSlab(start);
+            if (Slab_config[slab_id])
+                set_slab_prev(Slab_config[slab_id], NULL);
+        }
+        set_Available(start, next);
+    }
+    return result;
+}
+
+void *kalloc(unsigned long long size)
+{
+    if (size <= 0)
         return NULL;
-    }
 
-    // 对齐请求的大小
-    u16 aligned_size = align_size(size);
-    int size_class = get_size_class(aligned_size);
+    int target_size = upper_log2(size);
+    int target_slab_id = target_size > 3 ? target_size - 3 : 0;
+    target_size = target_size > 3 ? exp2(target_size) : 8;
 
-    acquire_spinlock(&allocator.locks[size_class]);
-
-    // ERROR: 没有合适的大小类别
-    if (size_class == -1) {
-        printk("kalloc: No suitable size class for size %u.\n", aligned_size);
-        return NULL;
-    }
-
-    // 查找合适的空闲块
-    Page* page = allocator.free_pages[size_class];
-
-    if (!page) {
-        page = kalloc_page();
-        // ERROR: 检查是否分配成功
-        if (!page) {
-            release_spinlock(&allocator.locks[size_class]);
-            printk("kalloc: Out of memory.\n");
-            return NULL;
+    int bound = Slab_division << 3;
+    if (target_size > bound) {
+        int s = target_size / 2;
+        int unit = s / Slab_division;
+        int k = upper_log2(bound) - 4;
+        for (int i = 0; i < Slab_division; i++) {
+            if (size < (u64)(s + (i + 1) * unit)) {
+                target_slab_id =
+                        (target_slab_id - k - 1) * Slab_division + k + 1 + i;
+                target_size = s + unit * (i + 1);
+                break;
+            }
         }
-        kinit_page(page, aligned_size);
     }
 
-    u16 block_offset = page->free_list_offset;
-    page->free_list_offset = *(u16*)((char*)page + block_offset);
-    page->free_list_num--;
-
-    if (page->free_list_num == 0) {
-        if (page->prev) {
-            page->prev->next = page->next;
-        } else {
-            allocator.free_pages[size_class] = page->next;
-        }
-        if (page->next) {
-            page->next->prev = page->prev;
-        }
-        page->in_free_list = false;
-        page->next = NULL;
-        page->prev = NULL;
+    acquire_spinlock(&locks[target_slab_id]);
+    void *target_slab = Slab_config[target_slab_id];
+    void *result;
+    if (target_slab == NULL) {
+        void *newPage = target_size < division ? kalloc_page() : kalloc_page2();
+        init_slab(newPage, target_size, target_slab_id);
+        Slab_config[target_slab_id] = newPage;
+        target_slab = newPage;
     }
 
-    release_spinlock(&allocator.locks[size_class]);
-    return (Page*)((char*)page + block_offset);
+    result = target_size < division ? find_slab_element(target_slab) :
+                                      find_slab_element2(target_slab);
+
+    if (result == NULL) {
+        printk("unit_size is %d\n", target_size);
+    }
+    // printk("success alloc %lld bytes at %p\n", size, result);
+    release_spinlock(&locks[target_slab_id]);
+    return result;
 }
 
 void kfree(void *ptr)
 {
-    // ERROR: 检查释放的指针是否合法
-    if (!ptr) {
-        printk("kfree: Attempted to free a NULL pointer.\n");
+    void *start = ptr < (void *)(P2K(0x60000000)) ? Slab_start(ptr) :
+                                                    Slab_start2(ptr);
+    int unit_size = Get_UnitSize(start);
+    int slab_id = get_id(start);
+
+    acquire_spinlock(&locks[slab_id]);
+
+    Minus_remain(start);
+    if (Get_remain(start) == 0) {
+        void *prev = Get_PrevSlab(start);
+        void *next = Get_NextSlab(start);
+        if (next)
+            set_slab_prev(next, prev);
+        if (prev)
+            set_slab_next(prev, next);
+        if (Slab_config[slab_id] == start) {
+            Slab_config[slab_id] = next;
+        }
+        unit_size < division ? kfree_page(start) : kfree_page2(start);
+        release_spinlock(&locks[slab_id]);
         return;
     }
 
-    // u64 phys_addr = K2P((u64)ptr);
-    // u64 page_phys_addr = phys_addr & ~(PAGE_SIZE - 1);
+    short *freeCounter = Get_FreeCounter(start);
 
-    void* page_virt_addr = (void*)((u64)ptr & ~(PAGE_SIZE - 1));
-    Page* page = (Page*)page_virt_addr;
-    u16 block_size = page->block_size;
-    int size_class = get_size_class(block_size);
+    (*freeCounter)++;
+    void *nextelement = Get_Available(start);
+    *(u64 *)ptr = (u64)nextelement;
+    set_Available(start, ptr); // change the content in the slab
 
-    // ERROR: 检查释放的块是否合法
-    if (size_class == -1) {
-        printk("kfree: Invalid block size %u.\n", block_size);
-        return;
+    if (!whether_available(start)) {
+        void *nextslab = Slab_config[slab_id];
+        Slab_config[slab_id] = start;
+        set_slab_next(start, nextslab); // change the available slab to this
+        set_slab_prev(start, NULL);
+        if (nextslab)
+            set_slab_prev(nextslab, start);
+        set_whether_available(start);
     }
 
-    acquire_spinlock(&allocator.locks[size_class]);
+    // printk("free %d bytes at %p\n", unit_size, ptr);
+    release_spinlock(&locks[slab_id]);
 
-    bool was_full = (page->free_list_num == 0);
-
-    *(u16*)ptr = page->free_list_offset;
-    page->free_list_offset = (u16)((char*)ptr - (char*)page);
-    page->free_list_num++;
-
-    // 若页变free，则插入到allocator.free_pages
-    if (was_full) {
-        page->next = allocator.free_pages[size_class];
-        page->prev = NULL;
-        if (allocator.free_pages[size_class]) {
-            allocator.free_pages[size_class]->prev = page;
-        }
-        allocator.free_pages[size_class] = page;
-        page->in_free_list = true;
-    }
-
-    // 若页已完全free，释放页
-    if ((u64)page->free_list_num == (USABLE_PAGE_SIZE(block_size)) / block_size) {
-        if (page->in_free_list) {
-            if (page->prev) {
-                page->prev->next = page->next;
-            } else {
-                allocator.free_pages[size_class] = page->next;
-            }
-            if (page->next) {
-                page->next->prev = page->prev;
-            }
-            page->in_free_list = false;
-        }
-        page->next = NULL;
-        page->prev = NULL;
-        kfree_page(page);
-    }
-
-    release_spinlock(&allocator.locks[size_class]);
     return;
 }

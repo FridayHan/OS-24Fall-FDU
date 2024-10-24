@@ -10,6 +10,7 @@ NO_RETURN void idle_entry()
 {
     set_cpu_on();
     while (1) {
+        printk("yield acquiring\n");
         yield();
         if (panic_flag)
             break;

@@ -33,12 +33,12 @@ void trap_global_handler(UserContext *context)
     case ESR_EC_DABORT_EL0:
     case ESR_EC_DABORT_EL1: {
         printk("page fault pid %d on CPU %lld\n", thisproc()->pid, cpuid());
-        // printk("EC: %llx ISS: %llx\n", ec, iss);
-        // printk("ELR: %llx\n", arch_get_elr());
-        // printk("SP: %llx\n", arch_get_usp());
-        // printk("TPIDR: %llx\n", arch_get_tid());
-        // printk("TPIDR_EL0: %llx\n", arch_get_tid0());
-        // printk("Page fault\n");
+        printk("EC: %llx ISS: %llx\n", ec, iss);
+        printk("ELR: %llx\n", arch_get_elr());
+        printk("SP: %llx\n", arch_get_usp());
+        printk("TPIDR: %llx\n", arch_get_tid());
+        printk("TPIDR_EL0: %llx\n", arch_get_tid0());
+        printk("Page fault\n");
         PANIC();
     } break;
     default: {

@@ -30,7 +30,7 @@ void init_sched()
         if (!p) {
             PANIC();
         }
-        p->idle = 1;
+        p->idle = true;
         p->state = RUNNING;
         p->parent = NULL;
         p->pid = -1;
@@ -76,7 +76,7 @@ bool is_zombie(Proc *p)
 {
     bool r;
     acquire_sched_lock();
-    // printk("is_zombie acquire_sched_lock\n");
+    printk("is_zombie acquire_sched_lock\n");
     r = p->state == ZOMBIE;
     release_sched_lock();
     return r;
@@ -104,7 +104,7 @@ bool activate_proc(Proc *p)
     // }
 
     acquire_sched_lock();
-    // printk("activate_proc acquire_sched_lock\n");
+    printk("activate_proc acquire_sched_lock\n");
     printk("%lld: activate_proc: PID %d\n", cpuid(), p->pid);
     if (p->state == RUNNING || p->state == RUNNABLE) {
         release_sched_lock();
@@ -155,6 +155,9 @@ static Proc *pick_next()
     // {
     //     return cpus[cpuid()].sched.idle_proc;
     // }
+
+    // if (cpuid() != 2 && thisproc()->pid != 0)
+    //     return cpus[cpuid()].sched.idle_proc;
 
     if (panic_flag) {
         return cpus[cpuid()].sched.idle_proc;
