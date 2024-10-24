@@ -65,12 +65,12 @@ PTEntriesPtr get_pte(struct pgdir *pgdir, u64 va, bool alloc)
 
     // 第3级页表
     idx = VA_PART3(va);
-    if (!(table[idx] & PTE_VALID)) {
-        if (!alloc) return NULL;
-        u64 phys_page = (u64)kalloc_page();  // 分配物理页面
-        if (!phys_page) return NULL;  // 分配失败
-        table[idx] = phys_page | PTE_PAGE | PTE_VALID | PTE_RW;  // 设置页表项为有效并映射物理页面
-    }
+    // if (!(table[idx] & PTE_VALID)) {
+    //     if (!alloc) return NULL;
+    //     u64 phys_page = (u64)kalloc_page();  // 分配物理页面
+    //     if (!phys_page) return NULL;  // 分配失败
+    //     table[idx] = phys_page | PTE_PAGE | PTE_VALID | PTE_RW;  // 设置页表项为有效并映射物理页面
+    // }
 
     // 返回指向该页表项的指针
     return &table[idx];
@@ -108,7 +108,7 @@ void free_pgdir(struct pgdir *pgdir)
                             for (int l = 0; l < N_PTE_PER_TABLE; l++) {
                                 if (table3[l] & PTE_VALID) {
                                     // 第3级页表项有效，不释放物理页，只释放页表本身
-                                    kfree_page((void*)P2K(PTE_ADDRESS(table3[l]))); // ???
+                                    table3[l] = 0;
                                 }
                             }
                             // 释放第3级页表

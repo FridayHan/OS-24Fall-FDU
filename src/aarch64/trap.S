@@ -23,9 +23,11 @@ trap_entry:
     
     mrs x1, sp_el0
     pushp(x1, x0)
+
     mrs x1, spsr_el1
     mrs x0, elr_el1
     pushp(x1, x0)
+
     mov x0, sp
     bl trap_global_handler
 
@@ -35,8 +37,10 @@ trap_return:
     popp(x1, x0)
     msr elr_el1, x0
     msr spsr_el1, x1
+
     popp(x1, x0)
     msr sp_el0, x1
+    
     popp(x1, x2)
     popp(x3, x4)
     popp(x5, x6)

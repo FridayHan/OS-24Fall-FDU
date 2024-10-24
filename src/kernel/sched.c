@@ -55,7 +55,6 @@ void init_schinfo(struct schinfo *p)
 
     init_list_node(&p->sched_node);
     init_list_node(&p->kill_node);
-    init_spinlock(&p->lock);
     p->in_run_queue = false;
 }
 
@@ -65,7 +64,7 @@ void acquire_sched_lock()
 
     // printk("Acquiring.\n");
     acquire_spinlock(&sched_lock);
-    printk("Acquired.\n");
+    // printk("Acquired.\n");
 }
 
 void release_sched_lock()
@@ -74,7 +73,7 @@ void release_sched_lock()
 
     // printk("Releasing.\n");
     release_spinlock(&sched_lock);
-    printk("Released.\n");
+    // printk("Released.\n");
 }
 
 bool is_zombie(Proc *p)
@@ -103,23 +102,9 @@ bool activate_proc(Proc *p)
     // if the proc->state if SLEEPING/UNUSED, set the process state to RUNNABLE and add it to the sched queue
     // else: panic
 
-    // acquire_spinlock(&run_queue_lock);
-    // if (cpuid() != 0) {
-    //     for (ListNode *p = run_queue.next; p != &run_queue; p = p->next) {
-    //         auto proc = container_of(p, Proc, schinfo.sched_node);
-    //         printk("PID %d in run_queue\n", proc->pid);
-    //     }
-    // }
-    // release_spinlock(&run_queue_lock);
-
-    // if (1)
-    // {
-    //     printk("activate_proc executing on CPU %lld\n", cpuid());
-    // }
-
     acquire_sched_lock();
-    printk("activate_proc acquire_sched_lock\n");
-    // printk("activate_proc: PID %d\n", p->pid);
+    // printk("activate_proc acquire_sched_lock\n");
+    printk("%lld: activate_proc: PID %d\n", cpuid(), p->pid);
     if (p->state == RUNNING || p->state == RUNNABLE) {
         release_sched_lock();
         return false;
@@ -143,14 +128,8 @@ static void update_this_state(enum procstate new_state)
     // TODO: if you use template sched function, you should implement this routinue
     // update the state of current process to new_state, and not [remove it from the sched queue if
     // new_state=SLEEPING/ZOMBIE]
-    
-    // if (cpuid() != 0 && thisproc()->pid != -1)
-    // {
-    //     printk("update_this_state executing on CPU %lld\n", cpuid());
-    // }
 
-    
-    // ASSERT(thisproc()->state == RUNNABLE || thisproc()->state == RUNNING);
+    printk("%lld: update_this_state: PID %d to %d\n", cpuid(), thisproc()->pid, new_state);
     thisproc()->state = new_state;
     if (new_state == SLEEPING || new_state == ZOMBIE) {
         if (thisproc()->schinfo.in_run_queue) {
@@ -166,14 +145,6 @@ static Proc *pick_next()
 {
     // TODO: if using template sched function, you should implement this routinue
     // choose the next process to run, and return idle if no runnable process
-    // if (thisproc()->pid > 4 && cpuid() == 0)
-    // {
-    //     return cpus[cpuid()].sched.idle_proc;
-    // }
-    // if (cpuid() != 0 && thisproc()->pid != -1)
-    // {
-    //     printk("pick_next executing on CPU %lld\n", cpuid());
-    // }
 
     if (panic_flag) {
         return cpus[cpuid()].sched.idle_proc;
@@ -183,18 +154,10 @@ static Proc *pick_next()
         auto proc = container_of(p, Proc, schinfo.sched_node);
         if (proc->state == RUNNABLE) {
             release_spinlock(&run_queue_lock);
-            // printk("PICK: pid: %d, cpuid: %lld\n", proc->pid, cpuid());
+            printk("PICK: pid: %d, cpuid: %lld\n", proc->pid, cpuid());
             return proc;
         }
     }
-    // for (ListNode *p = run_queue.next; p != &run_queue; p = p->next) {
-    //     auto proc = container_of(p, Proc, schinfo.sched_node);
-    //     if (proc->state == RUNNABLE) {
-    //         release_spinlock(&run_queue_lock);
-    //         return proc;
-    //     }
-    // }
-    // printk("PICK: pid: -1, cpuid: %lld\n", cpuid());
     release_spinlock(&run_queue_lock);
     return cpus[cpuid()].sched.idle_proc;
 }
@@ -204,6 +167,7 @@ static void update_this_proc(Proc *p)
     // TODO: you should implement this routinue
     // update thisproc to the choosen process
 
+    printk("%lld: update_this_proc: PID %d\n", cpuid(), p->pid);
     cpus[cpuid()].sched.thisproc = p;
 }
 
@@ -213,7 +177,7 @@ static void update_this_proc(Proc *p)
 void sched(enum procstate new_state)
 {
     auto this = thisproc();
-
+    printk("%lld: sched: PID %d\n", cpuid(), this->pid);
     if (this->killed && new_state != ZOMBIE) {
         release_sched_lock();
         return;

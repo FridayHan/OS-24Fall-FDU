@@ -17,11 +17,8 @@ enum procstate { UNUSED, RUNNABLE, RUNNING, SLEEPING, ZOMBIE };
 
 typedef struct UserContext {
     // TODO: customize your trap frame
-    u64 spsr;
-    u64 elr;
-    u64 sp;
-    // General Purpose registers
-    u64 gregs[31];
+    u64 spsr, elr, sp;
+    u64 x[31];
 } UserContext;
 
 typedef struct KernelContext {
@@ -40,7 +37,6 @@ struct schinfo {
     // TODO: customize your sched info
     ListNode sched_node;    // 调度队列节点
     bool in_run_queue;    // 是否在就绪队列中
-    SpinLock lock;
     ListNode kill_node;
 };
 
