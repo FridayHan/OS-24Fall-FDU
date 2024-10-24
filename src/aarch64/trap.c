@@ -33,6 +33,11 @@ void trap_global_handler(UserContext *context)
     case ESR_EC_DABORT_EL0:
     case ESR_EC_DABORT_EL1: {
         printk("cpuid: %lld\n", cpuid());
+        printk("Exception return address: %llx\n", context->elr);
+        printk("Exception syndrome register: %llx\n", esr);
+        printk("Exception class: %llx\n", ec);
+        printk("Instruction specific syndrome: %llx\n", iss);
+        printk("Instruction specific syndrome valid: %llx\n", ir);
         printk("Page fault\n");
         PANIC();
     } break;
