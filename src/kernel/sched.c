@@ -8,12 +8,20 @@
 #include <common/spinlock.h>
 
 extern bool panic_flag;
+static struct timer sched_timer[NCPU];
 
 extern void swtch(KernelContext *new_ctx, KernelContext **old_ctx);
 
 SpinLock sched_lock;
 SpinLock run_queue_lock;
 ListNode run_queue;
+
+static void sched_timer_callback(struct timer *t) {
+    // release_sched_lock();
+    t->data--;
+    acquire_sched_lock();
+    sched(RUNNABLE);
+}
 
 void init_sched()
 {
@@ -38,6 +46,7 @@ void init_sched()
         p->killed = false;
         p->parent = NULL;
         cpus[i].sched.idle_proc = cpus[i].sched.thisproc = p;
+        // init_sched_timer(i);
     }
 }
 
@@ -64,7 +73,7 @@ void acquire_sched_lock()
 
     // printk("Acquiring.\n");
     acquire_spinlock(&sched_lock);
-    // printk("%lld: Acquired.\n", cpuid());
+    printk("%lld: Acquired.\n", cpuid());
 }
 
 void release_sched_lock()
@@ -73,7 +82,7 @@ void release_sched_lock()
 
     // printk("Releasing.\n");
     release_spinlock(&sched_lock);
-    // printk("%lld: Released.\n", cpuid());
+    printk("%lld: Released.\n", cpuid());
 }
 
 bool is_zombie(Proc *p)
@@ -104,7 +113,7 @@ bool activate_proc(Proc *p)
 
     // printk("%lld: activate_proc acquiring\n", cpuid());
     acquire_sched_lock();
-    // printk("%lld: activate_proc: PID %d\n", cpuid(), p->pid);
+    printk("%lld: activate_proc: PID %d\n", cpuid(), p->pid);
     if (p->state == RUNNING || p->state == RUNNABLE) {
         // printk("%lld: activate_proc releasing\n", cpuid());
         release_sched_lock();
@@ -130,13 +139,21 @@ static void update_this_state(enum procstate new_state)
     // update the state of current process to new_state, and not [remove it from the sched queue if
     // new_state=SLEEPING/ZOMBIE]
 
-    // printk("%lld: update_this_state: PID %d to %d\n", cpuid(), thisproc()->pid, new_state);
+    printk("%lld: update_this_state: PID %d to %d\n", cpuid(), thisproc()->pid, new_state);
     thisproc()->state = new_state;
     if (new_state == SLEEPING || new_state == ZOMBIE) {
         if (thisproc()->schinfo.in_run_queue) {
             acquire_spinlock(&run_queue_lock);
             _detach_from_list(&thisproc()->schinfo.sched_node);
             thisproc()->schinfo.in_run_queue = false;
+            release_spinlock(&run_queue_lock);
+        }
+    }
+    else if (new_state == RUNNABLE) {
+        if (!thisproc()->schinfo.in_run_queue) {
+            acquire_spinlock(&run_queue_lock);
+            _insert_into_list(run_queue.prev, &thisproc()->schinfo.sched_node);
+            thisproc()->schinfo.in_run_queue = true;
             release_spinlock(&run_queue_lock);
         }
     }
@@ -155,7 +172,7 @@ static Proc *pick_next()
         auto proc = container_of(p, Proc, schinfo.sched_node);
         if (proc->state == RUNNABLE) {
             release_spinlock(&run_queue_lock);
-            // printk("PICK: pid: %d, cpuid: %lld\n", proc->pid, cpuid());
+            printk("PICK: pid: %d, cpuid: %lld\n", proc->pid, cpuid());
             return proc;
         }
     }
@@ -168,8 +185,36 @@ static void update_this_proc(Proc *p)
     // TODO: you should implement this routinue
     // update thisproc to the choosen process
 
-    // printk("%lld: update_this_proc: PID %d\n", cpuid(), p->pid);
+    printk("%lld: update_this_proc: PID %d\n", cpuid(), p->pid);
+
+    // if (!p->idle) {
+    //     set_cpu_timer(&sched_timer[cpuid()]);
+    // }
+
+
     cpus[cpuid()].sched.thisproc = p;
+
+    if (!p->idle) {
+    if (sched_timer[cpuid()].data > 0) {
+        cancel_cpu_timer(&sched_timer[cpuid()]);
+        sched_timer[cpuid()].data--;
+    }
+
+    cpus[cpuid()].sched.thisproc = p;
+
+    sched_timer[cpuid()].elapse = 20;
+    sched_timer[cpuid()].handler = sched_timer_callback;
+
+    set_cpu_timer(&sched_timer[cpuid()]);
+    sched_timer[cpuid()].data++;
+    }
+    // ASSERT(p->state == RUNNABLE);
+
+
+    // cancel_cpu_timer(&sched_timer[cpuid()]);
+    // sched_timer[cpuid()].elapse = 2;
+    // sched_timer[cpuid()].handler = sched_timer_callback;
+    // set_cpu_timer(&sched_timer[cpuid()]);
 }
 
 // A simple scheduler.
@@ -178,7 +223,7 @@ static void update_this_proc(Proc *p)
 void sched(enum procstate new_state)
 {
     auto this = thisproc();
-    // printk("%lld: sched: PID %d\n", cpuid(), this->pid);
+    printk("%lld: sched: PID %d\n", cpuid(), this->pid);
     if (this->killed && new_state != ZOMBIE) {
         // printk("%lld: sched releasing\n", cpuid());
         release_sched_lock();
@@ -206,3 +251,10 @@ u64 proc_entry(void (*entry)(u64), u64 arg)
     set_return_addr(entry);
     return arg;
 }
+
+
+// void init_sched_timer(int i) {
+//     sched_timer[i].elapse = 2;
+//     sched_timer[i].handler = sched_timer_callback;
+//     set_cpu_timer(&sched_timer[i]);
+// }
