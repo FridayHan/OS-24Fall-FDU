@@ -98,7 +98,7 @@ bool activate_proc(Proc *p)
 
     acquire_sched_lock();
     // printk("activate_proc acquire_sched_lock\n");
-    printk("activate_proc: PID %d\n", p->pid);
+    // printk("activate_proc: PID %d\n", p->pid);
     if (p->state == RUNNING || p->state == RUNNABLE) {
         release_sched_lock();
         return false;
