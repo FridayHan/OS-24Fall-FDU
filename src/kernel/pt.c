@@ -31,46 +31,46 @@ PTEntriesPtr get_pte(struct pgdir *pgdir, u64 va, bool alloc)
     PTEntriesPtr table = pgdir->pt;
     u64 idx;
 
-    // 第0级页表（PGD），获取索引并查找
+    // 第1级页表（PGD），获取索引并查找
     idx = VA_PART0(va);
     if (!(table[idx] & PTE_VALID)) {
         if (!alloc) return NULL;
-        // 分配第1级页表
-        table[idx] = (u64)kalloc_page() | PTE_TABLE | PTE_VALID;
+        // 分配第2级页表
+        table[idx] = (u64)K2P(kalloc_page()) | PTE_TABLE | PTE_VALID;
         if (!(table[idx] & PTE_VALID)) return NULL;  // 分配失败
         void* table_address = (void*)P2K(PTE_ADDRESS(table[idx]));
         memset(table_address, 0, PAGE_SIZE);  // 初始化为0
     }
     table = (PTEntriesPtr)P2K(PTE_ADDRESS(table[idx]));
 
-    // 第1级页表
+    // 第2级页表
     idx = VA_PART1(va);
     if (!(table[idx] & PTE_VALID)) {
         if (!alloc) return NULL;
-        table[idx] = (u64)kalloc_page() | PTE_TABLE | PTE_VALID;
-        if (!(table[idx] & PTE_VALID)) return NULL;  // 分配失败
-        memset((void*)P2K(PTE_ADDRESS(table[idx])), 0, PAGE_SIZE);
-    }
-    table = (PTEntriesPtr)P2K(PTE_ADDRESS(table[idx]));
-
-    // 第2级页表
-    idx = VA_PART2(va);
-    if (!(table[idx] & PTE_VALID)) {
-        if (!alloc) return NULL;
-        table[idx] = (u64)kalloc_page() | PTE_TABLE | PTE_VALID;
+        table[idx] = (u64)K2P(kalloc_page()) | PTE_TABLE | PTE_VALID;
         if (!(table[idx] & PTE_VALID)) return NULL;  // 分配失败
         memset((void*)P2K(PTE_ADDRESS(table[idx])), 0, PAGE_SIZE);
     }
     table = (PTEntriesPtr)P2K(PTE_ADDRESS(table[idx]));
 
     // 第3级页表
+    idx = VA_PART2(va);
+    if (!(table[idx] & PTE_VALID)) {
+        if (!alloc) return NULL;
+        table[idx] = (u64)K2P(kalloc_page()) | PTE_TABLE | PTE_VALID;
+        if (!(table[idx] & PTE_VALID)) return NULL;  // 分配失败
+        memset((void*)P2K(PTE_ADDRESS(table[idx])), 0, PAGE_SIZE);
+    }
+    table = (PTEntriesPtr)P2K(PTE_ADDRESS(table[idx]));
+
+    // 第4级页表
     idx = VA_PART3(va);
-    // if (!(table[idx] & PTE_VALID)) {
-    //     if (!alloc) return NULL;
+    if (!(table[idx] & PTE_VALID)) {
+        if (!alloc) return NULL;
     //     u64 phys_page = (u64)kalloc_page();  // 分配物理页面
     //     if (!phys_page) return NULL;  // 分配失败
     //     table[idx] = phys_page | PTE_PAGE | PTE_VALID | PTE_RW;  // 设置页表项为有效并映射物理页面
-    // }
+    }
 
     // 返回指向该页表项的指针
     return &table[idx];

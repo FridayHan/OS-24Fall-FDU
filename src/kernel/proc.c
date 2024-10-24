@@ -92,7 +92,7 @@ int start_proc(Proc *p, void (*entry)(u64), u64 arg)
     // 3. activate the proc and return its pid
     // NOTE: be careful of concurrency
     
-    printk("%lld: start_proc: PID %d\n", cpuid(), p->pid);
+    // printk("%lld: start_proc: PID %d\n", cpuid(), p->pid);
     if (p->parent == NULL) {
         acquire_spinlock(&proc_lock);
         p->parent = &root_proc;
@@ -120,13 +120,13 @@ int wait(int *exitcode)
     // NOTE: be careful of concurrency
 
     Proc *p = thisproc();
-    printk("%lld: wait: PID %d\n", cpuid(), p->pid);
+    // printk("%lld: wait: PID %d\n", cpuid(), p->pid);
     if (_empty_list(&p->children)) {
         return -1;
     }
 
     wait_sem(&p->childexit);
-    printk("wait acquiring\n");
+    // printk("%lld: wait acquiring\n", cpuid());
     acquire_spinlock(&proc_lock);
 
     _for_in_list(node, &p->children)
@@ -148,7 +148,7 @@ int wait(int *exitcode)
         }
     }
 
-    printk("wait PID: %d no zombie\n", p->pid);
+    // printk("wait PID: %d no zombie\n", p->pid);
     PANIC();
 }
 
@@ -161,14 +161,13 @@ NO_RETURN void exit(int code)
     // 4. sched(ZOMBIE)
     // NOTE: be careful of concurrency
 
-    printk("%lld: exit: PID %d\n", cpuid(), thisproc()->pid);
+    // printk("%lld: exit: PID %d\n", cpuid(), thisproc()->pid);
     Proc *p = thisproc();
     acquire_spinlock(&proc_lock);
-    printk("exit acquire_spinlock\n");
-    acquire_sched_lock();
+    // printk("exit proc_lock acquired\n");
     p->exitcode = code;
 
-    printk("exit: PID: %d, cpuid: %lld\n", p->pid, cpuid());
+    // printk("exit: PID: %d, cpuid: %lld\n", p->pid, cpuid());
     while(!_empty_list(&p->children)) {
         ListNode *node = p->children.next;
         Proc *cp = container_of(node, Proc, ptnode);
@@ -188,9 +187,9 @@ NO_RETURN void exit(int code)
     deallocate_pid(p->pid);
 
     post_sem(&p->parent->childexit);
+    // printk("%lld: exit acquiring\n", cpuid());
     acquire_sched_lock();
     release_spinlock(&proc_lock);
-    // printk("exit acquire_sched_lock\n");
 
     sched(ZOMBIE);
 
@@ -203,8 +202,8 @@ int kill(int pid)
     // Set the killed flag of the proc to true and return 0.
     // Return -1 if the pid is invalid (proc not found).
 
-    printk("kill PID: %d executing on CPU %lld\n", pid, cpuid());
-    printk("kill acquiring\n");
+    // printk("kill PID: %d executing on CPU %lld\n", pid, cpuid());
+    // printk("%lld: kill acquiring\n", cpuid());
     acquire_sched_lock();
 
     ListNode queue;
@@ -229,11 +228,9 @@ int kill(int pid)
         ListNode *node = queue.next;
         Proc *p = container_of(node, Proc, schinfo.kill_node);
         if (p->pid == pid && p->state != UNUSED) {
-            // acquire_spinlock(&p->schinfo.lock);
             p->killed = true;
-            // release_spinlock(&p->schinfo.lock);
+            // printk("%lld: kill releasing\n", cpuid());
             release_sched_lock();
-
             activate_proc(p);
             return 0;
         }
@@ -245,11 +242,12 @@ int kill(int pid)
                 continue;
             }
             ListNode *kill_node = &p0->schinfo.kill_node;
-            printk("PID: %d\n", p0->pid);
+            // printk("PID: %d\n", p0->pid);
             _insert_into_list(&queue, kill_node);
         }
         _detach_from_list(node);
     }
+    // printk("%lld: kill releasing\n", cpuid());
     release_sched_lock();
     return -1;
 }
