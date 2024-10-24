@@ -128,9 +128,10 @@ static void proc_test_1()
     }
     for (int i = 0; i < 10; i++) {
         int code, id;
+        printk("%lld: wait %d\n", cpuid(), i);
         id = wait(&code);
         ASSERT(pid[code] == id);
-        printk("proc %d exit\n", code);
+        printk("%lld: proc %d exit\n", cpuid(), code);
     }
     exit(0);
 }

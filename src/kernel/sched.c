@@ -105,7 +105,7 @@ bool activate_proc(Proc *p)
 
     acquire_sched_lock();
     // printk("activate_proc acquire_sched_lock\n");
-    // printk("activate_proc: PID %d\n", p->pid);
+    printk("%lld: activate_proc: PID %d\n", cpuid(), p->pid);
     if (p->state == RUNNING || p->state == RUNNABLE) {
         release_sched_lock();
         return false;
@@ -134,6 +134,8 @@ static void update_this_state(enum procstate new_state)
     //     printk("update_this_state executing on CPU %lld\n", cpuid());
     // }
 
+    printk("%lld: update_this_state: PID %d to %d\n",cpuid(), thisproc()->pid, new_state);
+
     thisproc()->state = new_state;
     if (new_state == SLEEPING || new_state == ZOMBIE) {
         if (thisproc()->schinfo.in_run_queue) {
@@ -153,10 +155,6 @@ static Proc *pick_next()
     // {
     //     return cpus[cpuid()].sched.idle_proc;
     // }
-    // if (cpuid() != 0 && thisproc()->pid != -1)
-    // {
-    //     printk("pick_next executing on CPU %lld\n", cpuid());
-    // }
 
     if (panic_flag) {
         return cpus[cpuid()].sched.idle_proc;
@@ -166,6 +164,7 @@ static Proc *pick_next()
         auto proc = container_of(p, Proc, schinfo.sched_node);
         if (proc->state == RUNNABLE) {
             release_spinlock(&run_queue_lock);
+            printk("%lld: next pid: %d\n", cpuid(), proc->pid);
             return proc;
         }
     }
@@ -177,6 +176,8 @@ static Proc *pick_next()
     //     }
     // }
     release_spinlock(&run_queue_lock);
+
+    printk("%lld: next pid: %d\n", cpuid(), -1);
     return cpus[cpuid()].sched.idle_proc;
 }
 
@@ -185,6 +186,7 @@ static void update_this_proc(Proc *p)
     // TODO: you should implement this routinue
     // update thisproc to the choosen process
 
+    printk("%lld: running PID %d\n", cpuid(), p->pid);
     cpus[cpuid()].sched.thisproc = p;
 }
 
@@ -194,7 +196,7 @@ static void update_this_proc(Proc *p)
 void sched(enum procstate new_state)
 {
     auto this = thisproc();
-    printk("sched: PID %d\n", this->pid);
+    printk("%lld: sched: PID %d to %d\n", cpuid(), this->pid, new_state);
     ASSERT(this->state == RUNNING);
     update_this_state(new_state);
     auto next = pick_next();

@@ -63,6 +63,7 @@ void init_proc(Proc *p)
 
 Proc *create_proc()
 {
+    printk("%lld: create_proc\n", cpuid());
     Proc *p = kalloc(sizeof(Proc));
     init_proc(p);
     return p;
@@ -74,6 +75,7 @@ void set_parent_to_this(Proc *proc)
     // NOTE: maybe you need to lock the process tree
     // NOTE: it's ensured that the old proc->parent = NULL
 
+    printk("%lld: set PID: %d parent to PID: %d\n",cpuid(), proc->pid, thisproc()->pid);
     // acquire_spinlock(&proc->schinfo.lock);
     acquire_spinlock(&proc_lock);
     proc->parent = thisproc();
@@ -102,7 +104,7 @@ int start_proc(Proc *p, void (*entry)(u64), u64 arg)
         release_spinlock(&proc_lock);
     }
 
-    // printk("start_proc: PID: %d\n", p->pid);
+    printk("%lld: start_proc: PID: %d\n", cpuid(), p->pid);
 
     p->kcontext->lr = (u64)proc_entry;  
     p->kcontext->x0 = (u64)entry;
@@ -127,11 +129,12 @@ int wait(int *exitcode)
     // }
 
     Proc *p = thisproc();
+    printk("%lld: wait: PID: %d\n", cpuid(), p->pid);
 
-    for (ListNode *node = p->children.next; node != &p->children; node = node->next)
-    {
-        // printk("Parent: %d, Child: %d\n", p->pid, container_of(node, Proc, ptnode)->pid);
-    }
+    // for (ListNode *node = p->children.next; node != &p->children; node = node->next)
+    // {
+    //     // printk("Parent: %d, Child: %d\n", p->pid, container_of(node, Proc, ptnode)->pid);
+    // }
     
     if (_empty_list(&p->children)) {
         return -1;
@@ -139,7 +142,7 @@ int wait(int *exitcode)
 
     // wait_sem(&p->childexit);
 
-    // while (1)
+    while (1)
     {
         wait_sem(&p->childexit);
     _for_in_list(node, &p->children)
@@ -181,11 +184,12 @@ NO_RETURN void exit(int code)
     // }
 
     Proc *p = thisproc();
+    printk("%lld: exit: PID: %d\n", cpuid(), p->pid);
     acquire_spinlock(&proc_lock);
     // acquire_spinlock(&p->schinfo.lock);
     p->exitcode = code;
 
-    printk("exit: PID: %d, cpuid: %lld\n", p->pid, cpuid());
+    printk("%lld: exit: PID: %d\n", cpuid(), p->pid);
     while(!_empty_list(&p->children)) {
         ListNode *node = p->children.next;
         Proc *cp = container_of(node, Proc, ptnode);

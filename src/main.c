@@ -28,7 +28,7 @@ void main()
         gicv3_init();
         gicv3_init_percpu();
 
-        timer_init(50);
+        timer_init(10);
         timer_init_percpu();
 
         /* initialize kernel memory allocator */
