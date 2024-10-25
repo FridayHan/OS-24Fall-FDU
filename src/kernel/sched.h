@@ -14,7 +14,7 @@ void acquire_sched_lock();
 void release_sched_lock();
 void sched(enum procstate new_state);
 
-void init_sched_timer(int i);
+void init_sched_timer();
 void sched_timer_callback(struct timer *t);
 
 // MUST call lock_for_sched() before sched() !!!

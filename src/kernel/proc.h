@@ -23,9 +23,8 @@ typedef struct UserContext {
 
 typedef struct KernelContext {
     // TODO: customize your context
-    u64 x0, x1;
+    u64 lr, x0, x1;
     u64 x[11]; // x19-x29
-    u64 lr;
 } KernelContext;
 
 typedef struct PIDNode {
@@ -38,8 +37,8 @@ struct schinfo {
     // TODO: customize your sched info
     ListNode sched_node;    // 调度队列节点
     bool in_run_queue;    // 是否在就绪队列中
-    ListNode kill_node;
-    u64 run_time;
+    // ListNode kill_node;
+    // u64 run_time;
 };
 
 typedef struct Proc {
@@ -57,6 +56,7 @@ typedef struct Proc {
     void *kstack;
     UserContext *ucontext;
     KernelContext *kcontext;
+    // u64 start_time;
 } Proc;
 
 extern Proc root_proc;
