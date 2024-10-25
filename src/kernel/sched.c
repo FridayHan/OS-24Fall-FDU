@@ -14,6 +14,7 @@ extern void swtch(KernelContext *new_ctx, KernelContext **old_ctx);
 
 SpinLock sched_lock;
 // SpinLock run_queue_lock;
+// SpinLock run_queue_lock;
 ListNode run_queue;
 
 // static void sched_timer_callback(struct timer *t) {
@@ -45,6 +46,7 @@ void init_sched()
         p->pid = -1;
         p->killed = false;
         p->parent = NULL;
+        p->schinfo.in_run_queue = false;
         cpus[i].sched.idle_proc = cpus[i].sched.thisproc = p;
         // init_sched_timer(i);
     }
@@ -173,13 +175,19 @@ static Proc *pick_next()
             continue;
         }
         auto proc = container_of(p, Proc, schinfo.sched_node);
+        // release_spinlock(&run_queue_lock);
+        // printk("proc->state: %d, proc->pid: %d\n", proc->state, proc->pid);
+        _detach_from_list(&proc->schinfo.sched_node);
+        proc->schinfo.in_run_queue = false;
+        ASSERT(proc->state == RUNNABLE);
         return proc;
         // if (proc->state == RUNNABLE) {
-        //     // release_spinlock(&run_queue_lock);
+        //     release_spinlock(&run_queue_lock);
         //     // printk("PICK: pid: %d, cpuid: %lld\n", proc->pid, cpuid());
         //     return proc;
         // }
     }
+    // printk("PICK: pid: -1, cpuid: %lld\n", cpuid());
     // release_spinlock(&run_queue_lock);
     return cpus[cpuid()].sched.idle_proc;
 }
@@ -189,13 +197,13 @@ static void update_this_proc(Proc *p)
     // TODO: you should implement this routinue
     // update thisproc to the choosen process
 
-    // printk("%lld: update_this_proc: PID %d\n", cpuid(), p->pid);
-
-    // if (!p->idle) {
-    //     set_cpu_timer(&sched_timer[cpuid()]);
-    // }
-
-    _detach_from_list(&p->schinfo.sched_node);
+    // printk("update_this_proc: PID %d, cpuid %lld\n", p->pid, cpuid());
+    // acquire_spinlock(&run_queue_lock);
+    if (thisproc()->schinfo.in_run_queue) {
+        _detach_from_list(&thisproc()->schinfo.sched_node);
+        thisproc()->schinfo.in_run_queue = false;
+    }
+    // release_spinlock(&run_queue_lock);
     cpus[cpuid()].sched.thisproc = p;
 
     // if (!p->idle) {
@@ -243,8 +251,11 @@ void sched(enum procstate new_state)
     
     ASSERT(this->state == RUNNING);
     update_this_state(new_state);
+    // printk("sched: PID %d, cpuid: %lld\n", this->pid, cpuid());
     auto next = pick_next();
+    // printk("sched: PID %d, cpuid: %lld\n", next->pid, cpuid());
     update_this_proc(next);
+    // printk("sched: PID %d, cpuid: %lld\n", this->pid, cpuid());
     ASSERT(next->state == RUNNABLE);
     next->state = RUNNING;
     if (next != this) {
