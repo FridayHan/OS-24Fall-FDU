@@ -38,6 +38,8 @@ void init_proc(Proc *p)
     // setup the Proc with kstack and pid allocated
     // NOTE: be careful of concurrency
 
+    acquire_spinlock(&proc_lock);
+
     p->killed = false;
     p->idle = false;
     p->pid = allocate_pid();
@@ -53,13 +55,16 @@ void init_proc(Proc *p)
     init_pgdir(&p->pgdir);
 
     p->kstack = kalloc(KSTACK_SIZE);
-    memset(p->kstack, 0, KSTACK_SIZE);
     if (!p->kstack) {
         PANIC();
     }
+    memset(p->kstack, 0, KSTACK_SIZE);
+
     p->kcontext = (KernelContext *)(p->kstack + KSTACK_SIZE - sizeof(KernelContext) - sizeof(UserContext));
     p->ucontext = (UserContext *)(p->kstack + KSTACK_SIZE - sizeof(UserContext));
     ASSERT(sizeof(KernelContext) + sizeof(UserContext) <= KSTACK_SIZE);
+
+    release_spinlock(&proc_lock);
 }
 
 Proc *create_proc()
@@ -115,17 +120,17 @@ int wait(int *exitcode)
     // 3. if any child exits, clean it up and return its pid and exitcode
     // NOTE: be careful of concurrency
 
-    Proc *p = thisproc();
-    if (_empty_list(&p->children)) {
+    Proc *this = thisproc();
+    if (_empty_list(&this->children)) {
         return -1;
     }
 
-    wait_sem(&p->childexit);
+    wait_sem(&this->childexit);
     acquire_spinlock(&proc_lock);
 
-    _for_in_list(node, &p->children)
+    _for_in_list(node, &this->children)
     {
-        if (node == &p->children)
+        if (node == &this->children)
             continue;
         Proc *cp = container_of(node, Proc, ptnode);
         if (is_zombie(cp)) {
@@ -154,12 +159,12 @@ NO_RETURN void exit(int code)
     // 4. sched(ZOMBIE)
     // NOTE: be careful of concurrency
 
-    Proc *p = thisproc();
+    Proc *this = thisproc();
     acquire_spinlock(&proc_lock);
-    p->exitcode = code;
+    this->exitcode = code;
 
-    while(!_empty_list(&p->children)) {
-        ListNode *node = p->children.next;
+    while(!_empty_list(&this->children)) {
+        ListNode *node = this->children.next;
         Proc *cp = container_of(node, Proc, ptnode);
         _detach_from_list(node);
         cp->parent = &root_proc;
@@ -170,13 +175,13 @@ NO_RETURN void exit(int code)
         }
     }
 
-    post_sem(&p->parent->childexit);
+    post_sem(&this->parent->childexit);
 
-    free_pgdir(&p->pgdir);
+    // free_pgdir(&this->pgdir);
 
-    deallocate_pid(p->pid);
+    deallocate_pid(this->pid);
 
-    post_sem(&p->parent->childexit);
+    // post_sem(&this->parent->childexit);
     acquire_sched_lock();
     release_spinlock(&proc_lock);
 
@@ -185,40 +190,71 @@ NO_RETURN void exit(int code)
     PANIC(); // prevent the warning of 'no_return function returns'
 }
 
+Proc *dfs(Proc *p, int pid)
+{
+    if (p->pid == pid) {
+        return p;
+    } else if (!_empty_list(&p->children)) {
+        _for_in_list(node, &p->children) {
+            if (node == &p->children) {
+                continue;
+            }
+            Proc *cp = container_of(node, Proc, ptnode);
+            Proc *ret = dfs(cp, pid);
+            if (ret) {
+                return ret;
+            }
+        }
+    }
+    return NULL;
+}
+
 int kill(int pid)
 {
     // TODO:
     // Set the killed flag of the proc to true and return 0.
     // Return -1 if the pid is invalid (proc not found).
-
-    acquire_sched_lock();
-
-    ListNode queue;
-    init_list_node(&queue);
-    _insert_into_list(&queue, &root_proc.schinfo.kill_node);
-
-    while (!_empty_list(&queue)) {
-        ListNode *node = queue.next;
-        Proc *p = container_of(node, Proc, schinfo.kill_node);
-        if (p->pid == pid && p->state != UNUSED) {
-            p->killed = true;
-            release_sched_lock();
-            activate_proc(p);
-            return 0;
-        }
-
-        _for_in_list(node2, &p->children) {
-            Proc *p0 = container_of(node2, Proc, ptnode);
-            if (p0->pid == p->pid || p0->pid < 0) {
-                continue;
-            }
-            ListNode *kill_node = &p0->schinfo.kill_node;
-            _insert_into_list(&queue, kill_node);
-        }
-        _detach_from_list(node);
+// dfs kill
+    acquire_spinlock(&proc_lock);
+    Proc *p = dfs(&root_proc, pid);
+    if (p && !is_unused(p)) {
+        p->killed = true;
+        activate_proc(p);
+        release_spinlock(&proc_lock);
+        return 0;
     }
-    release_sched_lock();
+    release_spinlock(&proc_lock);
     return -1;
+
+// bfs kill
+    // acquire_spinlock(&proc_lock);
+
+    // ListNode queue;
+    // init_list_node(&queue);
+    // _insert_into_list(&queue, &root_proc.schinfo.kill_node);
+
+    // while (!_empty_list(&queue)) {
+    //     ListNode *node = queue.next;
+    //     Proc *p = container_of(node, Proc, schinfo.kill_node);
+    //     if (p->pid == pid && p->state != UNUSED) {
+    //         p->killed = true;
+    //         release_spinlock(&proc_lock);
+    //         activate_proc(p);
+    //         return 0;
+    //     }
+
+    //     _for_in_list(node2, &p->children) {
+    //         Proc *p0 = container_of(node2, Proc, ptnode);
+    //         if (p0->pid == p->pid || p0->pid < 0) {
+    //             continue;
+    //         }
+    //         ListNode *kill_node = &p0->schinfo.kill_node;
+    //         _insert_into_list(&queue, kill_node);
+    //     }
+    //     _detach_from_list(node);
+    // }
+    // release_spinlock(&proc_lock);
+    // return -1;
 }
 
 void init_pid_pool(int initial_pid_count) {

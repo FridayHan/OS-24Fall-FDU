@@ -24,3 +24,14 @@ PICK: pid: 2, cpuid: 3, state: 0
 =====/root/data/OS-24Fall-FDU/src/kernel/sched.c:185 PANIC3!=====
 CPU 3: stopped
 为什么会出现unused
+
+
+
+
+diff:
+proc.c:64,65 (要不要-16，这里留出的是什么空间)
+
+proc.c:140,144 (是否要在wait中就free_pid，exitcode要不要进行判断)
+
+sched.c:117 (是否要PANIC)
+
