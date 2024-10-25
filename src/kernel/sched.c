@@ -145,8 +145,8 @@ static void update_this_state(enum procstate new_state)
 
     // printk("%lld: update_this_state: PID %d to %d\n", cpuid(), thisproc()->pid, new_state);
     thisproc()->state = new_state;
-    if (new_state == SLEEPING || new_state == ZOMBIE) {
-        if (thisproc()->schinfo.in_run_queue) {
+    if ((new_state == SLEEPING || new_state == ZOMBIE) && (thisproc()->state == RUNNABLE)) {
+        if (thisproc()->schinfo.in_run_queue) { // TODO:rebundant
             // acquire_spinlock(&run_queue_lock);
             _detach_from_list(&thisproc()->schinfo.sched_node);
             thisproc()->schinfo.in_run_queue = false;
@@ -172,27 +172,28 @@ static Proc *pick_next()
         return cpus[cpuid()].sched.idle_proc;
     }
     // acquire_spinlock(&run_queue_lock);
-    _for_in_list(p, &run_queue) {
-        if(p==&run_queue) {
-            continue;
-        }
-        auto proc = container_of(p, Proc, schinfo.sched_node);
+
+    auto p = run_queue.next;
+    if (p == &run_queue) {
         // release_spinlock(&run_queue_lock);
-        // printk("proc->state: %d, proc->pid: %d\n", proc->state, proc->pid);
-        _detach_from_list(&proc->schinfo.sched_node);
-        proc->schinfo.in_run_queue = false;
-        // printk("PICK: pid: %d, cpuid: %lld, state: %d\n", proc->pid, cpuid(), proc->state);
-        ASSERT(proc->state == RUNNABLE);
-        return proc;
-        // if (proc->state == RUNNABLE) {
-        //     release_spinlock(&run_queue_lock);
-        //     // printk("PICK: pid: %d, cpuid: %lld\n", proc->pid, cpuid());
-        //     return proc;
-        // }
+        return cpus[cpuid()].sched.idle_proc;
     }
+    auto proc = container_of(p, Proc, schinfo.sched_node);
+    // release_spinlock(&run_queue_lock);
+    // printk("proc->state: %d, proc->pid: %d\n", proc->state, proc->pid);
+    _detach_from_list(&proc->schinfo.sched_node);
+    proc->schinfo.in_run_queue = false;
+    // printk("PICK: pid: %d, cpuid: %lld, state: %d\n", proc->pid, cpuid(), proc->state);
+    ASSERT(proc->state == RUNNABLE);
+    return proc;
+    // if (proc->state == RUNNABLE) {
+    //     release_spinlock(&run_queue_lock);
+    //     // printk("PICK: pid: %d, cpuid: %lld\n", proc->pid, cpuid());
+    //     return proc;
+    // }
     // printk("PICK: pid: -1, cpuid: %lld\n", cpuid());
     // release_spinlock(&run_queue_lock);
-    return cpus[cpuid()].sched.idle_proc;
+    // return cpus[cpuid()].sched.idle_proc;
 }
 
 static void update_this_proc(Proc *p)
@@ -202,10 +203,12 @@ static void update_this_proc(Proc *p)
 
     // printk("update_this_proc: PID %d, cpuid %lld\n", p->pid, cpuid());
     // acquire_spinlock(&run_queue_lock);
-    if (thisproc()->schinfo.in_run_queue) {
-        _detach_from_list(&thisproc()->schinfo.sched_node);
-        thisproc()->schinfo.in_run_queue = false;
-    }
+
+    // if (thisproc()->schinfo.in_run_queue) {
+    //     _detach_from_list(&thisproc()->schinfo.sched_node);
+    //     thisproc()->schinfo.in_run_queue = false;
+    // }
+    
     // release_spinlock(&run_queue_lock);
     cpus[cpuid()].sched.thisproc = p;
 
