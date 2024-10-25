@@ -8,3 +8,19 @@ poset_sem会被多次调用，打印同一个pid。（原来应该start_proc和a
 pt.c: 为什么get_pte要使用P2K，为什么memset无法操作物理内存？
 
 pt.c: free_pgdir: 为什么要释放最里面的物理页
+
+TEST: kill 16
+TEST: kill 17
+TEST: kill 18
+TEST: kill 19
+TEST: kill 20
+TEST: kill 21
+TEST: kill 22
+0: sched: PID 1
+PICK: pid: 20, cpuid: 0, state: 1
+sched: PID 20, cpuid: 0
+3: sched: PID 22
+PICK: pid: 2, cpuid: 3, state: 0
+=====/root/data/OS-24Fall-FDU/src/kernel/sched.c:185 PANIC3!=====
+CPU 3: stopped
+为什么会出现unused
