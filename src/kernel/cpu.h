@@ -4,7 +4,7 @@
 #include <common/rbtree.h>
 
 #define NCPU 4
-#define TIMESLICE 5
+
 struct sched {
     // TODO: customize your sched info
     Proc *thisproc;

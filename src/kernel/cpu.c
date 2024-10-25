@@ -23,7 +23,6 @@ static void __timer_set_clock()
 {
     auto node = _rb_first(&cpus[cpuid()].timer);
     if (!node) {
-        // printk("cpu %lld set clock 1000, no timer left\n", cpuid());
         reset_clock(1000);
         return;
     }
@@ -57,26 +56,6 @@ void init_clock_handler()
 }
 
 static struct timer hello_timer[NCPU];
-static struct timer sched_timer[NCPU];
-
-void init_sched_timer() {
-    sched_timer[cpuid()].elapse = TIMESLICE;
-    sched_timer[cpuid()].handler = sched_timer_callback;
-    set_cpu_timer(&sched_timer[cpuid()]);
-}
-
-void sched_timer_callback(struct timer *t) {
-    // u64 end_time = get_timestamp_ms();
-    // u64 time_used = end_time - thisproc()->start_time;
-    // printk("%lld: sched_timer_callback PID: %d\n", cpuid(), thisproc()->pid);
-    // printk("%lld: time used: %lld ms\n", cpuid(), time_used);
-
-    t->data++;
-    set_cpu_timer(&sched_timer[cpuid()]);
-
-    acquire_sched_lock();
-    sched(RUNNABLE);
-}
 
 static void hello(struct timer *t)
 {
@@ -115,8 +94,6 @@ void set_cpu_on()
     hello_timer[cpuid()].elapse = 5000;
     hello_timer[cpuid()].handler = hello;
     set_cpu_timer(&hello_timer[cpuid()]);
-
-    init_sched_timer();
 }
 
 void set_cpu_off()
