@@ -3,16 +3,6 @@
 #include <common/string.h>
 #include <aarch64/intrinsic.h>
 
-// void* alloc_page_table() {
-//     // 调用kalloc_page分配一页内存
-//     void* page_table = kalloc_page();
-//     if (page_table) {
-//         // 初始化为0，清除旧数据
-//         memset(page_table, 0, PAGE_SIZE);
-//     }
-//     return page_table;  // 返回页表指针
-// }
-
 PTEntriesPtr get_pte(struct pgdir *pgdir, u64 va, bool alloc)
 {
     // TODO:
