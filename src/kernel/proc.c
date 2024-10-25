@@ -27,7 +27,7 @@ void init_kproc()
     init_pid_pool(INITIAL_PID_COUNT);
     init_proc(&root_proc);
     init_spinlock(&proc_lock);
-    init_sem(&root_proc.childexit, 0);
+    // init_sem(&root_proc.childexit, 0);
     root_proc.state = UNUSED;
     root_proc.parent = &root_proc;
     start_proc(&root_proc, kernel_entry, 123456);
@@ -134,8 +134,8 @@ int wait(int *exitcode)
 
     _for_in_list(node, &p->children)
     {
-        // if (node == &p->children)
-        //     continue;
+        if (node == &p->children)
+            continue;
         Proc *cp = container_of(node, Proc, ptnode);
         if (is_zombie(cp)) {
             int pid = cp->pid;
@@ -178,7 +178,7 @@ NO_RETURN void exit(int code)
         _detach_from_list(node);
         cp->parent = &root_proc;
         ASSERT(cp->pid != 0);
-        _insert_into_list(&root_proc.children, node);
+        _insert_into_list(root_proc.children.prev, node);
         if (is_zombie(cp)) {
             post_sem(&root_proc.childexit);
         }

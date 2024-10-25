@@ -39,7 +39,7 @@ static void __timer_set_clock()
 static void timer_clock_handler()
 {
     reset_clock(1000);
-    printk("cpu %lld aha, timestamp ms: %lld\n", cpuid(), get_timestamp_ms());
+    // printk("cpu %lld aha, timestamp ms: %lld\n", cpuid(), get_timestamp_ms());
     while (1) {
         auto node = _rb_first(&cpus[cpuid()].timer);
         if (!node)
@@ -73,6 +73,9 @@ void set_cpu_timer(struct timer *timer)
     timer->_key = get_timestamp_ms() + timer->elapse;
     ASSERT(0 == _rb_insert(&timer->_node, &cpus[cpuid()].timer, __timer_cmp));
     __timer_set_clock();
+
+    u64 remaining_time = timer->_key - get_timestamp_ms();
+    printk("CPU %lld: Timer set, remaining time: %lld ms\n", cpuid(), remaining_time);
 }
 
 void cancel_cpu_timer(struct timer *timer)
