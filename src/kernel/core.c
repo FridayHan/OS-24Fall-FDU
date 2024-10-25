@@ -12,7 +12,10 @@ NO_RETURN void idle_entry()
     while (1) {
         yield();
         if (panic_flag)
+        {
+            printk("CPU %lld: PANIC! Stopped.\n", cpuid());
             break;
+        }
         arch_with_trap
         {
             arch_wfi();

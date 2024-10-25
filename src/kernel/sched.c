@@ -13,7 +13,19 @@ extern bool panic_flag;
 extern void swtch(KernelContext *new_ctx, KernelContext **old_ctx);
 
 SpinLock sched_lock;
-ListNode run_queue;
+static struct rb_root_ run_tree;
+static struct timer sched_timer[NCPU];
+
+static bool __timer_cmp(rb_node lnode, rb_node rnode)
+{
+    i64 d = container_of(lnode, struct schinfo, rb_sched_node)->vruntime -
+            container_of(rnode, struct schinfo, rb_sched_node)->vruntime;
+    if (d < 0)
+        return true;
+    if (d == 0)
+        return lnode < rnode;
+    return false;
+}
 
 void init_sched()
 {
@@ -22,7 +34,6 @@ void init_sched()
     // 2. initialize the scheduler info of each CPU
 
     init_spinlock(&sched_lock);
-    init_list_node(&run_queue);
 
     for (int i = 0; i < NCPU; i++) {
         Proc *p = kalloc(sizeof(Proc));
@@ -36,7 +47,6 @@ void init_sched()
         p->pid = -1;
         p->killed = false;
         p->parent = NULL;
-        p->schinfo.in_run_queue = false;
         cpus[i].sched.idle_proc = cpus[i].sched.thisproc = p;
     }
 }
@@ -53,8 +63,7 @@ void init_schinfo(struct schinfo *p)
 {
     // TODO: initialize your customized schinfo for every newly-created process
 
-    init_list_node(&p->sched_node);
-    p->in_run_queue = false;
+    p->vruntime = 0;
 }
 
 void acquire_sched_lock()
@@ -102,8 +111,7 @@ bool activate_proc(Proc *p)
         return false;
     } else if (p->state == SLEEPING || p->state == UNUSED) {
         p->state = RUNNABLE;
-        _insert_into_list(&run_queue, &p->schinfo.sched_node);
-        p->schinfo.in_run_queue = true;
+        _rb_insert(&p->schinfo.rb_sched_node, &run_tree, __timer_cmp);
     } else {
         PANIC();
         release_sched_lock();
@@ -120,16 +128,10 @@ static void update_this_state(enum procstate new_state)
     // new_state=SLEEPING/ZOMBIE]
 
     if ((new_state == SLEEPING || new_state == ZOMBIE) && (thisproc()->state == RUNNABLE)) {
-        if (thisproc()->schinfo.in_run_queue) { // TODO:rebundant
-            _detach_from_list(&thisproc()->schinfo.sched_node);
-            thisproc()->schinfo.in_run_queue = false;
-        }
+        _rb_erase(&thisproc()->schinfo.rb_sched_node, &run_tree);
     }
     else if (new_state == RUNNABLE && !thisproc()->idle) {
-        if (!thisproc()->schinfo.in_run_queue) {
-            _insert_into_list(run_queue.prev, &thisproc()->schinfo.sched_node);
-            thisproc()->schinfo.in_run_queue = true;
-        }
+        _rb_insert(&thisproc()->schinfo.rb_sched_node, &run_tree, __timer_cmp);
     }
     thisproc()->state = new_state;
 }
@@ -142,16 +144,21 @@ static Proc *pick_next()
     if (panic_flag)
         return cpus[cpuid()].sched.idle_proc;
 
-    auto p = run_queue.next;
-    if (p == &run_queue) {
-        return cpus[cpuid()].sched.idle_proc;
-    }
+    auto next = _rb_first(&run_tree);
 
-    auto proc = container_of(p, Proc, schinfo.sched_node);
-    _detach_from_list(&proc->schinfo.sched_node);
-    proc->schinfo.in_run_queue = false;
-    ASSERT(proc->state == RUNNABLE);
-    return proc;
+    if (next)
+    {
+        auto proc = container_of(next, Proc, schinfo.rb_sched_node);
+        return proc;
+    }
+    return cpus[cpuid()].sched.idle_proc;
+}
+
+static void sched_timer_callback(struct timer *t) {
+    t->data--;
+    thisproc()->schinfo.vruntime += TIMESLICE;
+    acquire_sched_lock();
+    sched(RUNNABLE);
 }
 
 static void update_this_proc(Proc *p)
@@ -159,8 +166,23 @@ static void update_this_proc(Proc *p)
     // TODO: you should implement this routinue
     // update thisproc to the choosen process
 
-    // thisproc()->start_time = get_timestamp_ms();
+    if (sched_timer[cpuid()].data > 0) {
+        cancel_cpu_timer(&sched_timer[cpuid()]);
+        sched_timer[cpuid()].data--;
+    }
     cpus[cpuid()].sched.thisproc = p;
+
+    sched_timer[cpuid()].elapse = TIMESLICE;
+    sched_timer[cpuid()].handler = sched_timer_callback;
+
+    set_cpu_timer(&sched_timer[cpuid()]);
+    sched_timer[cpuid()].data++;
+
+    ASSERT(p->state == RUNNABLE);
+    if (!p->idle)
+    {
+        _rb_erase(&p->schinfo.rb_sched_node, &run_tree);
+    }
 }
 
 void sched(enum procstate new_state)
