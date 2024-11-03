@@ -8,21 +8,19 @@
 #include <common/spinlock.h>
 
 extern bool panic_flag;
-// static struct timer sched_timer[NCPU];
+static struct timer sched_timer[NCPU];
 
 extern void swtch(KernelContext *new_ctx, KernelContext **old_ctx);
 
 SpinLock sched_lock;
-// SpinLock run_queue_lock;
-// SpinLock run_queue_lock;
 ListNode run_queue;
 
-// static void sched_timer_callback(struct timer *t) {
-//     // release_sched_lock();
-//     t->data--;
-//     acquire_sched_lock();
-//     sched(RUNNABLE);
-// }
+void sched_timer_callback(struct timer *t) {
+    // release_sched_lock();
+    // t->data--;
+    acquire_sched_lock();
+    sched(RUNNABLE);
+}
 
 void init_sched()
 {
@@ -48,7 +46,7 @@ void init_sched()
         p->parent = NULL;
         p->schinfo.in_run_queue = false;
         cpus[i].sched.idle_proc = cpus[i].sched.thisproc = p;
-        // init_sched_timer(i);
+        init_sched_timer(i);
     }
 }
 
@@ -123,7 +121,11 @@ bool activate_proc(Proc *p)
     } else if (p->state == SLEEPING || p->state == UNUSED) {
         p->state = RUNNABLE;
         // acquire_spinlock(&run_queue_lock);
-        _insert_into_list(run_queue.prev, &p->schinfo.sched_node);
+        _insert_into_list(&run_queue, &p->schinfo.sched_node);
+        // _for_in_list(node, &run_queue) {
+        //     auto proc = container_of(node, Proc, schinfo.sched_node);
+        //     printk("PID: %d\n", proc->pid);
+        // }
         // release_spinlock(&run_queue_lock);
         p->schinfo.in_run_queue = true;
     } else {
@@ -151,7 +153,7 @@ static void update_this_state(enum procstate new_state)
             // release_spinlock(&run_queue_lock);
         }
     }
-    else if (new_state == RUNNABLE) {
+    else if (new_state == RUNNABLE && !thisproc()->idle) {
         if (!thisproc()->schinfo.in_run_queue) {
             // acquire_spinlock(&run_queue_lock);
             _insert_into_list(run_queue.prev, &thisproc()->schinfo.sched_node);
@@ -179,6 +181,7 @@ static Proc *pick_next()
         // printk("proc->state: %d, proc->pid: %d\n", proc->state, proc->pid);
         _detach_from_list(&proc->schinfo.sched_node);
         proc->schinfo.in_run_queue = false;
+        // printk("PICK: pid: %d, cpuid: %lld, state: %d\n", proc->pid, cpuid(), proc->state);
         ASSERT(proc->state == RUNNABLE);
         return proc;
         // if (proc->state == RUNNABLE) {
@@ -236,9 +239,6 @@ static void update_this_proc(Proc *p)
     // set_cpu_timer(&sched_timer[cpuid()]);
 }
 
-// A simple scheduler.
-// You are allowed to replace it with whatever you like.
-// call with sched_lock
 void sched(enum procstate new_state)
 {
     auto this = thisproc();
@@ -276,8 +276,8 @@ u64 proc_entry(void (*entry)(u64), u64 arg)
 }
 
 
-// void init_sched_timer(int i) {
-//     sched_timer[i].elapse = 2;
-//     sched_timer[i].handler = sched_timer_callback;
-//     set_cpu_timer(&sched_timer[i]);
-// }
+void init_sched_timer(int i) {
+    sched_timer[i].elapse = 10;
+    sched_timer[i].handler = sched_timer_callback;
+    set_cpu_timer(&sched_timer[i]);
+}
