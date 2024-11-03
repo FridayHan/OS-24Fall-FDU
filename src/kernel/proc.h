@@ -23,8 +23,9 @@ typedef struct UserContext {
 
 typedef struct KernelContext {
     // TODO: customize your context
-    u64 lr, x0, x1;
+    u64 x0, x1;
     u64 x[11]; // x19-x29
+    u64 lr;
 } KernelContext;
 
 typedef struct PIDNode {
