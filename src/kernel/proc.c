@@ -134,8 +134,8 @@ int wait(int *exitcode)
 
     _for_in_list(node, &p->children)
     {
-        // if (node == &p->children)
-        //     continue;
+        if (node == &p->children)
+            continue;
         Proc *cp = container_of(node, Proc, ptnode);
         if (is_zombie(cp)) {
             int pid = cp->pid;
