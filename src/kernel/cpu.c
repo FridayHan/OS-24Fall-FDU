@@ -55,7 +55,7 @@ void init_clock_handler()
     set_clock_handler(&timer_clock_handler);
 }
 
-static struct timer hello_timer[4];
+static struct timer hello_timer[NCPU];
 
 static void hello(struct timer *t)
 {

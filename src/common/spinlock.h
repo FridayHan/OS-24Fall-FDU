@@ -8,6 +8,6 @@ typedef struct {
 } SpinLock;
 
 void init_spinlock(SpinLock *);
-bool try_acquire_spinlock(SpinLock *);
+bool try_acquire_spinlock(SpinLock *); // 暂时用不到
 void acquire_spinlock(SpinLock *);
 void release_spinlock(SpinLock *);

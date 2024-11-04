@@ -17,7 +17,6 @@ static volatile bool boot_secondary_cpus = false;
 void main()
 {
     if (cpuid() == 0) {
-        /* @todo: Clear BSS section.*/
         extern char edata[], end[];
         memset(edata, 0, (usize)(end - edata));
 

@@ -5,20 +5,32 @@
 #include <common/sem.h>
 #include <common/rbtree.h>
 #include <kernel/pt.h>
+#include <common/spinlock.h>
 
 enum procstate { UNUSED, RUNNABLE, RUNNING, SLEEPING, ZOMBIE };
 
 typedef struct UserContext {
     // TODO: customize your trap frame
+    u64 spsr, elr, sp;
+    u64 x[31];
 } UserContext;
 
 typedef struct KernelContext {
     // TODO: customize your context
+    u64 lr, x0, x1;
+    u64 x[11]; // x19-x29
 } KernelContext;
+
+typedef struct PIDNode {
+    ListNode node;
+    int pid;
+} PIDNode;
 
 // embeded data for procs
 struct schinfo {
     // TODO: customize your sched info
+    struct rb_node_ rb_sched_node;
+    u64 vruntime;
 };
 
 typedef struct Proc {
@@ -38,6 +50,11 @@ typedef struct Proc {
     KernelContext *kcontext;
 } Proc;
 
+extern Proc root_proc;
+extern ListNode free_pid_list; 
+extern SpinLock pid_lock;
+extern SpinLock proc_lock;
+
 void init_kproc();
 void init_proc(Proc *);
 Proc *create_proc();
@@ -45,3 +62,7 @@ int start_proc(Proc *, void (*entry)(u64), u64 arg);
 NO_RETURN void exit(int code);
 int wait(int *exitcode);
 int kill(int pid);
+
+void init_pid_pool(int initial_pid_count);
+int allocate_pid();
+void deallocate_pid(int pid);

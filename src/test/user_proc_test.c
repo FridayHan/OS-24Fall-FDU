@@ -77,13 +77,19 @@ void user_proc_test()
         // 2. set elr = EXTMEM
         // 3. set spsr = 0
 
+        p->ucontext->x[0] = i;
+        p->ucontext->elr = EXTMEM;
+        p->ucontext->spsr = 0;
+
         pids[i] = start_proc(p, trap_return, 0);
         printk("pid[%d] = %d\n", i, pids[i]);
     }
     ASSERT(wait_sem(&myrepot_done));
     printk("done\n");
-    for (int i = 0; i < 22; i++)
+    for (int i = 0; i < 22; i++) {
+        printk("TEST: kill %d\n", pids[i]);
         ASSERT(kill(pids[i]) == 0);
+    }
     for (int i = 0; i < 22; i++) {
         int code;
         int pid = wait(&code);

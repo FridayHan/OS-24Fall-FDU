@@ -12,7 +12,10 @@ NO_RETURN void idle_entry()
     while (1) {
         yield();
         if (panic_flag)
+        {
+            printk("CPU %lld: PANIC! Stopped.\n", cpuid());
             break;
+        }
         arch_with_trap
         {
             arch_wfi();
@@ -34,8 +37,9 @@ NO_RETURN void kernel_entry()
     
     /* LAB 4 TODO 3 END */
 
-    while (1)
+    while (1){
         yield();
+    }
 }
 
 NO_INLINE NO_RETURN void _panic(const char *file, int line)
