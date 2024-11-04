@@ -46,7 +46,6 @@ void init_proc(Proc *p)
     p->state = UNUSED;
     p->parent = NULL;
     p->exitcode = 0;
-    p->schinfo.in_run_queue = false;
 
     init_sem(&p->childexit, 0);
     init_list_node(&p->children);

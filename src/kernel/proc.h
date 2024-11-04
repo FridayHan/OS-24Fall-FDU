@@ -9,12 +9,6 @@
 
 enum procstate { UNUSED, RUNNABLE, RUNNING, SLEEPING, ZOMBIE };
 
-// typedef struct UserContext {
-//     // TODO: customize your trap frame
-//     u64 spsr, elr;
-//     u64 x[18]; // x0-x18
-// } UserContext;
-
 typedef struct UserContext {
     // TODO: customize your trap frame
     u64 spsr, elr, sp;
@@ -35,10 +29,8 @@ typedef struct PIDNode {
 // embeded data for procs
 struct schinfo {
     // TODO: customize your sched info
-    ListNode sched_node;    // 调度队列节点
-    bool in_run_queue;    // 是否在就绪队列中
-    // ListNode kill_node;
-    // u64 run_time;
+    struct rb_node_ rb_sched_node;
+    u64 vruntime;
 };
 
 typedef struct Proc {
@@ -56,7 +48,6 @@ typedef struct Proc {
     void *kstack;
     UserContext *ucontext;
     KernelContext *kcontext;
-    // u64 start_time;
 } Proc;
 
 extern Proc root_proc;
