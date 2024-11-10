@@ -74,8 +74,8 @@ void set_cpu_timer(struct timer *timer)
     ASSERT(0 == _rb_insert(&timer->_node, &cpus[cpuid()].timer, __timer_cmp));
     __timer_set_clock();
 
-    u64 remaining_time = timer->_key - get_timestamp_ms();
-    printk("CPU %lld: Timer set, remaining time: %lld ms\n", cpuid(), remaining_time);
+    // u64 remaining_time = timer->_key - get_timestamp_ms();
+    // printk("CPU %lld: Timer set, remaining time: %lld ms\n", cpuid(), remaining_time);
 }
 
 void cancel_cpu_timer(struct timer *timer)

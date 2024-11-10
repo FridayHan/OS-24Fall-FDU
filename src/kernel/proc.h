@@ -36,10 +36,12 @@ typedef struct PIDNode {
 // embeded data for procs
 struct schinfo {
     // TODO: customize your sched info
-    ListNode sched_node;    // 调度队列节点
+    struct rb_node_ sched_node;    // 调度队列节点
     bool in_run_queue;    // 是否在就绪队列中
     ListNode kill_node;
-    u64 run_time;
+    u64 vruntime;
+    int prio;
+    int weight;
 };
 
 typedef struct Proc {
