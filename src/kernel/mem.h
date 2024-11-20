@@ -38,5 +38,5 @@ void kinit();
 WARN_RESULT void *kalloc_page();
 void kfree_page(void *);
 
-WARN_RESULT void *kalloc(unsigned long long);
+WARN_RESULT void *kalloc(u16);
 void kfree(void *);

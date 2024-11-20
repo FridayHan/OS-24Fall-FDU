@@ -118,7 +118,8 @@ int virtio_blk_rw(Buf *b)
     while (!disk.virtq.info[d0].done) {
         _lock_sem(&b->sem);
         release_spinlock(&disk.lk);
-        _wait_sem(&b->sem);
+        if (!_wait_sem(&b->sem, true))
+            return -1;
         acquire_spinlock(&disk.lk);
     }
     /* LAB 4 TODO 1 END */

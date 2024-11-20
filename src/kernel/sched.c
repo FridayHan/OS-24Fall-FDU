@@ -111,8 +111,20 @@ bool _activate_proc(Proc *p, bool onalert)
         return false;
     } else if (p->state == SLEEPING || p->state == UNUSED) {
         p->state = RUNNABLE;
-        _rb_insert(&p->schinfo.rb_sched_node, &run_tree, __timer_cmp);
-    } else {
+        if (_rb_insert(&p->schinfo.rb_sched_node, &run_tree, __timer_cmp))
+            PANIC();
+    } else if (p->state == DEEPSLEEPING) {
+        if (onalert) {
+            release_sched_lock();
+            return false;
+        }
+        else {
+            p->state = RUNNABLE;
+            if (_rb_insert(&p->schinfo.rb_sched_node, &run_tree, __timer_cmp))
+                PANIC();
+        }
+    }
+    else {
         PANIC();
         release_sched_lock();
         return false;
@@ -131,7 +143,8 @@ static void update_this_state(enum procstate new_state)
         _rb_erase(&thisproc()->schinfo.rb_sched_node, &run_tree);
     }
     else if (new_state == RUNNABLE && !thisproc()->idle) {
-        _rb_insert(&thisproc()->schinfo.rb_sched_node, &run_tree, __timer_cmp);
+        if (_rb_insert(&thisproc()->schinfo.rb_sched_node, &run_tree, __timer_cmp))
+            PANIC();
     }
     thisproc()->state = new_state;
 }
