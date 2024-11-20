@@ -1,0 +1,37 @@
+pick_next中如果不使用0号cpu，就可以多核跑，但是偶尔会有并发问题。
+
+进入test的核无法打印living
+
+poset_sem会被多次调用，打印同一个pid。（原来应该start_proc和activate_proc一一对应。）
+
+
+pt.c: 为什么get_pte要使用P2K，为什么memset无法操作物理内存？
+
+pt.c: free_pgdir: 为什么要释放最里面的物理页
+
+TEST: kill 16
+TEST: kill 17
+TEST: kill 18
+TEST: kill 19
+TEST: kill 20
+TEST: kill 21
+TEST: kill 22
+0: sched: PID 1
+PICK: pid: 20, cpuid: 0, state: 1
+sched: PID 20, cpuid: 0
+3: sched: PID 22
+PICK: pid: 2, cpuid: 3, state: 0
+=====/root/data/OS-24Fall-FDU/src/kernel/sched.c:185 PANIC3!=====
+CPU 3: stopped
+为什么会出现unused
+
+
+
+
+diff:
+proc.c:64,65 (要不要-16，这里留出的是什么空间)
+
+proc.c:140,144 (是否要在wait中就free_pid，exitcode要不要进行判断)
+
+sched.c:117 (是否要PANIC)
+
