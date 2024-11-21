@@ -8,6 +8,7 @@
 
 #define BLOCK_SIZE 512
 #define KSTACK_SIZE 2048
+#define MAX_DATA_BLOCKS 1024
 
 #define MAX_PID 32768
 #define INITIAL_PID_COUNT 2
