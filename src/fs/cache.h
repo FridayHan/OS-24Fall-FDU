@@ -18,11 +18,22 @@
 #define EVICTION_THRESHOLD 20
 
 /**
+    @brief timestamp used for LRU eviction.
+ */
+
+static usize global_timestamp = 0; // 记录全局时间戳
+
+/**
     @brief a block in block cache.
 
     @note you can add any member to this struct as you want.
  */
 typedef struct {
+    /** 
+        @brief the last accessed time of this block.
+     */
+    usize last_accessed_time;
+
     /**
         @brief the corresponding block number on disk.
 
@@ -253,3 +264,8 @@ extern BlockCache bcache;
     @note You may want to put it into `*_init` method groups.
  */
 void init_bcache(const SuperBlock *sblock, const BlockDevice *device);
+
+static usize cache_alloc(OpContext *ctx);
+static void cache_free(OpContext *ctx, usize block_no);
+
+static void evict_block();
