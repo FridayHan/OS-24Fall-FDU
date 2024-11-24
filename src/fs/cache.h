@@ -22,12 +22,12 @@
 
     This is used to limit the number of operations that can be performed
  */
-#define MAX_NUM_OP 10
+#define MAX_NUM_OP 5
 
 /**
     @brief timestamp used for LRU eviction.
  */
-static usize global_timestamp = 0; // 记录全局时间戳
+extern usize global_timestamp; // 记录全局时间戳
 
 /**
     @brief a block in block cache.
@@ -276,7 +276,8 @@ extern BlockCache bcache;
  */
 void init_bcache(const SuperBlock *sblock, const BlockDevice *device);
 
-static usize cache_alloc(OpContext *ctx);
-static void cache_free(OpContext *ctx, usize block_no);
+usize cache_alloc(OpContext *ctx);
+void cache_free(OpContext *ctx, usize block_no);
 
-static void evict_block();
+void evict_block();
+Block *find_cache(usize);
