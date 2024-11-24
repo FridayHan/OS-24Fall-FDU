@@ -18,9 +18,15 @@
 #define EVICTION_THRESHOLD 20
 
 /**
+    @brief maximum number of operations that can be performed concurrently.
+
+    This is used to limit the number of operations that can be performed
+ */
+#define MAX_NUM_OP 1
+
+/**
     @brief timestamp used for LRU eviction.
  */
-
 static usize global_timestamp = 0; // 记录全局时间戳
 
 /**
@@ -100,6 +106,11 @@ typedef struct {
     @see begin_op, end_op
  */
 typedef struct {
+    // /**
+    //     @brief the ID of this atomic operation.
+    //  */
+    // u32 id;
+
     /**
         @brief how many operation remains in this atomic operation?
 

@@ -48,6 +48,8 @@ static LogHeader header; // in-memory copy of log header block.
 
 static Block *bitmap_block; // the block containing bitmap.
 
+static u32 oid; // the ID of the current atomic operation.
+
 /**
     @brief a struct to maintain other logging states.
     
@@ -63,15 +65,9 @@ static Block *bitmap_block; // the block containing bitmap.
  */
 struct {
     /* your fields here */
-    usize running_ops;         // 当前正在运行的原子操作数量
+    u32 id;                    // 当前原子操作的ID
     bool checkpoint_done;      // 检查点是否已完成
-    usize log_size;            // 日志区域的总大小（块数）
-    usize committed_blocks;    // 已提交但未检查点的块数量
-    usize max_running_ops;     // 最大允许运行的原子操作数
-
-    ListNode log_list;         // 日志中记录的块列表（可选：双向链表管理日志记录）
-    usize block_no[LOG_MAX_SIZE]; // 当前记录在日志中的块号数组
-    usize num_blocks;          // 当前日志中块的数量
+    u32 running_ops;       // 当前正在运行的原子操作数量
 
     SpinLock log_lock;         // 用于保护日志结构的锁
     Semaphore log_sem;         // 用于同步的信号量
@@ -126,9 +122,6 @@ static void evict_block() {
     Block *to_evict = NULL;
     usize oldest_time = (usize)-1;
 
-    // printk("evict_block acquire_spinlock\n");
-    // acquire_spinlock(&lock);
-
     ListNode *node = head.next;
     while (node != &head) {
         Block *block = container_of(node, Block, node);
@@ -149,16 +142,13 @@ static void evict_block() {
 
     // 如果找到块，驱逐它
     if (to_evict) {
-        // if (to_evict->pinned) device_write(to_evict); // 同步脏块
         _detach_from_list(&to_evict->node);          // 从链表中移除
-        kfree(to_evict);                             // 释放内存
     }
 }
 
 // see `cache.h`.
 static Block *cache_acquire(usize block_no) {
     // TODO
-    // printk("cache_acquire acquire_spinlock\n");
     acquire_spinlock(&lock);
 
     ListNode *node = head.next;
@@ -176,20 +166,17 @@ static Block *cache_acquire(usize block_no) {
                 block->last_accessed_time = global_timestamp++; // 更新访问时间
                 printk("last_accessed_time: %lld\n", block->last_accessed_time);
                 release_spinlock(&lock);
-                // printk("got: acquiring sleeplock\n");
                 acquire_sleeplock(&block->lock);
                 return block;
             } else {
                 printk("Block %lld is already acquired\n", block_no);
                 release_spinlock(&lock);
-                // printk("wait: acquiring sleeplock\n");
                 acquire_sleeplock(&block->lock);
                 ASSERT(!block->acquired);
                 ASSERT(block->valid);
                 block->acquired = true; // 标记为已获取
                 block->last_accessed_time = global_timestamp++; // 更新访问时间
                 printk("last_accessed_time: %lld\n", block->last_accessed_time);
-                // printk("releasing sleeplock\n");
                 release_sleeplock(&block->lock);
                 return block;
             }
@@ -229,20 +216,17 @@ static void cache_release(Block *block) {
     // 确保传入的块不为空
     if (!block) {
         PANIC();
-        return;
     }
 
     // 确保块处于已占用状态
     ASSERT(block->acquired);
 
     // 加锁，更新块状态
-    // printk("cache_release acquire_spinlock\n");
     acquire_spinlock(&lock);
     block->acquired = false; // 标记为未被占用
     release_spinlock(&lock);
 
     // 释放块上的睡眠锁
-    // printk("releasing sleeplock\n");
     release_sleeplock(&block->lock);
 }
 
@@ -262,12 +246,19 @@ void init_bcache(const SuperBlock *_sblock, const BlockDevice *_device) {
     memset(&header, 0, sizeof(header));
     read_header(); // 从磁盘加载日志头
 
-    init_sem(&log.log_sem, 0);
+    init_sem(&log.log_sem, MAX_NUM_OP); // 初始化信号量
+
+    log.running_ops = 0; // 初始化运行中的操作数量
 
     bitmap_block = kalloc(sizeof(Block));
     init_block(bitmap_block);
     bitmap_block->block_no = sblock->bitmap_start;
     device_read(bitmap_block);
+
+    // 从磁盘读取日志，如果非空，那么需要恢复数据
+
+
+
 
     // 恢复日志
     if (header.num_blocks > 0) {
@@ -298,8 +289,6 @@ void init_bcache(const SuperBlock *_sblock, const BlockDevice *_device) {
         memset(&header, 0, sizeof(header));
         write_header(); // 更新磁盘上的日志头
     }
-
-    // printk("Block cache initialized.\n");
 }
 
 // see `cache.h`.
@@ -307,161 +296,103 @@ static void cache_begin_op(OpContext *ctx) {
     // TODO
     if (!ctx) PANIC();
 
-    // printk("Begin op: acquiring lock\n");
+    wait_sem(&log.log_sem); // 判断操作数量是否超过上限
+
     acquire_spinlock(&lock);
-
-    while (log.running_ops >= OP_MAX_NUM_BLOCKS) {
-        release_spinlock(&lock);
-        printk("Too many running ops, waiting...\n");
-        wait_sem(&log.log_sem); // 等待其他操作完成
-        printk("Woke up\n");
-        // printk("Begin op: acquiring lock\n");
-        acquire_spinlock(&lock);
-        // sleep(&log, &lock); // 等待其他操作完成
-    }
-
-    log.running_ops++;
+    // 分配一个id
+    // ctx->id = oid++;
     ctx->rm = OP_MAX_NUM_BLOCKS;
-    // ctx->ts = get_timestamp(); // 分配时间戳
     release_spinlock(&lock);
-    printk("Begin op: done\n");
+
+    acquire_spinlock(&log.log_lock);
+    log.running_ops++;
+    release_spinlock(&log.log_lock);
 }
 
 // see `cache.h`.
 static void cache_sync(OpContext *ctx, Block *block) {
     // TODO
-    if (block == NULL) PANIC(); // 块指针不能为空
+    if (!block) PANIC();
+    if (!ctx) { device_write(block); return; }
 
-    // 确保块号在范围内且已分配
+    if (!ctx->rm) PANIC(); // 达到块数量上限，无法继续同步
+    printk("Syncing block %lld\n", block->block_no);
+
+    // 从位图中检查块是否已分配
     if (!bitmap_get(bitmap_block->data, block->block_no)) {
         printk("Block %lld is not allocated\n", block->block_no);
         
         acquire_spinlock(&lock);
         bitmap_set(bitmap_block->data, block->block_no); // 将块标记为已分配
         release_spinlock(&lock);
-
-        bcache.sync(ctx, bitmap_block); // 同步位图到磁盘
+        device_write(bitmap_block); // 将位图写回磁盘
     }
 
-    // 如果有上下文，记录日志
-    if (ctx && block->pinned) {
+    // 如果块被固定，那么需要将其写入日志
+    if (block->pinned) {
         printk("Syncing block %lld\n", block->block_no);
-        if (ctx->rm == 0) PANIC(); // 达到块数量上限，无法继续同步
         ctx->rm--;                // 减少可用块数
-        // printk("sync acquiring lock\n");
+
         acquire_spinlock(&log.log_lock);
-        if (log.num_blocks < LOG_MAX_SIZE) {
-            log.block_no[log.num_blocks++] = block->block_no; // 记录块号
+        if (header.num_blocks < LOG_MAX_SIZE) {
+            header.block_no[header.num_blocks++] = block->block_no; // 记录块号
+            write_header(); // 更新日志头
         } else {
             PANIC(); // 日志已满，无法继续记录
         }
-        // Block *log_block = kalloc(sizeof(Block));
-        // init_block(log_block);
-        // log_block->block_no = sblock->log_start + sblock->num_log_blocks + log.committed_blocks;
-        // log_block->valid = true;
-        // log_block->pinned = false;
-        // memcpy(log_block->data, block->data, BLOCK_SIZE); // 复制块内容
-        // _insert_into_list(&log.log_list, &log_block->node); // 将块添加到日志链表
-        // log.committed_blocks++; // 增加已提交但未检查点的块数量
-        // // printk("sync releasing lock\n");
-        // release_spinlock(&log.log_lock);
-
-        // device_write(sblock->log_start + sblock->num_log_blocks + log.committed_blocks - 1); // 将块写入日志
-        // block->pinned = false; // 清除脏标记
         release_spinlock(&log.log_lock);
     }
 
     printk("Writing block %lld\n", block->block_no);
-    // 写入块到磁盘
-    device_write(block);
-
-    // printk("sync: releasing sleeplock\n");
-    // release_sleeplock(&block->lock);
 }
 
 // see `cache.h`.
 static void cache_end_op(OpContext *ctx) {
     // TODO
+    printk("End op\n");
     if (!ctx) PANIC();
 
-    log.running_ops--; // Decrement the running operation counter
-    post_sem(&log.log_sem); // Notify waiting operations
-
+    printk("log.running_ops: %lld\n", log.running_ops);
     if (log.running_ops != 0) {
-        wait_sem(&log.log_sem); // 等待其他操作完成
         return;
     }
 
     acquire_spinlock(&log.log_lock);
-    printk("Atomic operation started.\n");
     for (usize i = 0; i < header.num_blocks; i++) {
         Block *log_block = kalloc(sizeof(Block));
-        init_block(log_block);
-        log_block->block_no = sblock->log_start + sblock->num_log_blocks + i;
-        log_block->valid = true;
-        log_block->pinned = false;
-
         Block *block = cache_acquire(header.block_no[i]);
-        memcpy(log_block->data, block->data, BLOCK_SIZE); // 复制块内容
-        device_write(log_block); // 将块写入日志
+        init_block(log_block);
+        memcpy(log_block->data, block->data, BLOCK_SIZE);
         cache_release(block);
+        // kfree(block);
+        log_block->block_no = sblock->log_start + sblock->num_log_blocks + i;
+        // log_block->valid = false;
+        device_write(log_block); // 将块写入日志
+        kfree(log_block);
     }
-    printk("Atomic operation ended successfully.\n");
 
-    // TODO : 接下来把log写入磁盘即可
+    // 把日志块写回data区域
     for (usize i = 0; i < header.num_blocks; i++) {
         Block *block = cache_acquire(header.block_no[i]);
         device_write(block);
         cache_release(block);
     }
 
-    // Clear log metadata
+    // 清空日志头
     header.num_blocks = 0;
     release_spinlock(&log.log_lock);
 
+    // 置空日志
+    for (usize i = 0; i < header.num_blocks; i++) {
+        Block *log_block = kalloc(sizeof(log));
+        memset(log_block, 0, sizeof(Block));
+        init_block(log_block);
+        log_block->block_no = sblock->log_start + sblock->num_log_blocks + i;
+        device_write(log_block);
+        kfree(log_block);
+    }
 
-
-
-    printk("Atomic operation ended successfully.\n");
-
-    // for (usize i = 0; i < log.committed_blocks; i++) {
-    //     usize log_block_no = sblock->log_start + i;
-
-    //     Block *log_block = kalloc(sizeof(Block));
-    //     init_block(log_block);
-    //     log_block->block_no = log_block_no;
-    //     memset(log_block->data, 0, BLOCK_SIZE); // 填充空数据
-    //     device_write(log_block); // 将空数据写入日志块
-    //     kfree(log_block); // 释放临时块内存
-    // }
-
-    // // Clear log metadata
-    // log.committed_blocks = 0;
-    // log.num_blocks = 0;
-
-
-
-
-
-    // Block *log_block = kalloc(sizeof(Block));
-    // init_block(log_block);
-    // log_block->block_no = sblock->log_start + sblock->num_log_blocks + log.committed_blocks;
-    // log_block->valid = true;
-    // log_block->pinned = false;
-    // memcpy(log_block->data, block->data, BLOCK_SIZE); // 复制块内容
-    // _insert_into_list(&log.log_list, &log_block->node); // 将块添加到日志链表
-    // log.committed_blocks++; // 增加已提交但未检查点的块数量
-    // // printk("sync releasing lock\n");
-    // release_spinlock(&log.log_lock);
-
-    // device_write(sblock->log_start + sblock->num_log_blocks + log.committed_blocks - 1); // 将块写入日志
-    // block->pinned = false; // 清除脏标记
-
-
-
-
-    // release_spinlock(&log.log_lock);
-
+    post_sem(&log.log_sem); // Notify waiting operations
     printk("Atomic operation ended successfully.\n");
 }
 
@@ -499,7 +430,7 @@ static usize cache_alloc(OpContext *ctx) {
     block->pinned = false; // 标记为未固定
     _insert_into_list(&head, &block->node); // 将块添加到缓存链表
 
-    bcache.sync(ctx, bitmap_block); // 同步位图到磁盘
+    device_write(bitmap_block); // 同步位图到磁盘
 
 
     printk("Synced block %lld\n", block_no);
@@ -521,7 +452,7 @@ static void cache_free(OpContext *ctx, usize block_no) {
 
     // 将块对应的位设置为 0
     bitmap_clear(bitmap_block->data, block_no);
-    bcache.sync(ctx, bitmap_block); // 同步位图到磁盘
+    device_write(bitmap_block); // 同步位图到磁盘
 
     release_spinlock(&lock);
 }

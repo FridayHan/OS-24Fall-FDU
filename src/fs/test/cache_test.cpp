@@ -164,7 +164,6 @@ void test_atomic_op()
     OpContext ctx;
     bcache.begin_op(&ctx);
     bcache.end_op(&ctx);
-
     bcache.begin_op(&ctx);
 
     usize t = sblock.num_blocks - 1;
