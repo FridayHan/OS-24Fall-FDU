@@ -22,7 +22,7 @@
 
     This is used to limit the number of operations that can be performed
  */
-#define MAX_NUM_OP 1
+#define MAX_NUM_OP 10
 
 /**
     @brief timestamp used for LRU eviction.
