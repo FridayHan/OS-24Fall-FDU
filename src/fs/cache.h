@@ -18,11 +18,28 @@
 #define EVICTION_THRESHOLD 20
 
 /**
+    @brief maximum number of operations that can be performed concurrently.
+
+    This is used to limit the number of operations that can be performed
+ */
+#define MAX_NUM_OP 5
+
+/**
+    @brief timestamp used for LRU eviction.
+ */
+extern usize global_timestamp; // 记录全局时间戳
+
+/**
     @brief a block in block cache.
 
     @note you can add any member to this struct as you want.
  */
 typedef struct {
+    /** 
+        @brief the last accessed time of this block.
+     */
+    usize last_accessed_time;
+
     /**
         @brief the corresponding block number on disk.
 
@@ -89,6 +106,11 @@ typedef struct {
     @see begin_op, end_op
  */
 typedef struct {
+    // /**
+    //     @brief the ID of this atomic operation.
+    //  */
+    // u32 id;
+
     /**
         @brief how many operation remains in this atomic operation?
 
@@ -253,3 +275,9 @@ extern BlockCache bcache;
     @note You may want to put it into `*_init` method groups.
  */
 void init_bcache(const SuperBlock *sblock, const BlockDevice *device);
+
+usize cache_alloc(OpContext *ctx);
+void cache_free(OpContext *ctx, usize block_no);
+
+void evict_block();
+Block *find_cache(usize);
