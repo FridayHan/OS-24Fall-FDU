@@ -27,13 +27,11 @@ void test_alloc()
 
     assert_eq(mock.count_inodes(), 1);
     mock.end_op(ctx);
-    printf("ino: %d\n", ino);
     assert_eq(mock.count_inodes(), 2);
 
     auto *p = inodes.get(ino);
 
     inodes.lock(p);
-    printf("hello\n");
     inodes.unlock(p);
 
     mock.begin_op(ctx);
