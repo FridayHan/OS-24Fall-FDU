@@ -148,8 +148,8 @@ void test_lru()
         bcache.release(b);
     }
 
-    printf("(debug) #cached = %zu, #read = %zu\n",
-           bcache.get_num_cached_blocks(), mock.read_count.load());
+    printf("(debug) #cached = %zu, #read = %zu, #write = %zu\n",
+           bcache.get_num_cached_blocks(), mock.read_count.load(), mock.write_count.load());
     assert_true(bcache.get_num_cached_blocks() <= EVICTION_THRESHOLD);
     assert_true(mock.read_count < 233);
     assert_true(mock.write_count < 5);
@@ -164,7 +164,6 @@ void test_atomic_op()
     OpContext ctx;
     bcache.begin_op(&ctx);
     bcache.end_op(&ctx);
-
     bcache.begin_op(&ctx);
 
     usize t = sblock.num_blocks - 1;

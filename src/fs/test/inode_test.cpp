@@ -32,7 +32,6 @@ void test_alloc()
     auto *p = inodes.get(ino);
 
     inodes.lock(p);
-    // printf("hello\n");
     inodes.unlock(p);
 
     mock.begin_op(ctx);

@@ -83,48 +83,152 @@ static usize inode_alloc(OpContext* ctx, InodeType type) {
     ASSERT(type != INODE_INVALID);
 
     // TODO
-    return 0;
+    usize inum = 1;
+    // printk("sblock->num_inodes: %d\n", sblock->num_inodes);
+
+    while (inum < sblock->num_inodes) {
+        usize block_no = to_block_no(inum);
+        Block* block = cache->acquire(block_no);
+        InodeEntry* entry = get_entry(block, inum);
+        if (entry->type == INODE_INVALID) {
+            memset(entry, 0, sizeof(InodeEntry));
+            entry->type = type;
+            cache->sync(ctx, block);
+            cache->release(block);
+            return inum;
+        }
+        cache->release(block);
+        inum++;
+    }
+
+    PANIC();
 }
 
 // see `inode.h`.
 static void inode_lock(Inode* inode) {
     ASSERT(inode->rc.count > 0);
     // TODO
+    acquire_sleeplock(&inode->lock);
 }
 
 // see `inode.h`.
 static void inode_unlock(Inode* inode) {
     ASSERT(inode->rc.count > 0);
     // TODO
+    release_sleeplock(&inode->lock);
 }
 
 // see `inode.h`.
 static void inode_sync(OpContext* ctx, Inode* inode, bool do_write) {
     // TODO
+    if (do_write) {
+        ASSERT(inode->valid);
+        Block* block = cache->acquire(to_block_no(inode->inode_no));
+        InodeEntry* entry = get_entry(block, inode->inode_no);
+
+        memcpy(entry, &inode->entry, sizeof(InodeEntry));
+        cache->sync(ctx, block);
+        cache->release(block);
+    } else {
+        if (!inode->valid) {
+            Block* block = cache->acquire(to_block_no(inode->inode_no));
+            InodeEntry* entry = get_entry(block, inode->inode_no);
+            memcpy(&inode->entry, entry, sizeof(InodeEntry));
+            inode->valid = true;
+            cache->release(block);
+        }
+    }
 }
 
 // see `inode.h`.
 static Inode* inode_get(usize inode_no) {
     ASSERT(inode_no > 0);
     ASSERT(inode_no < sblock->num_inodes);
-    _acquire_spinlock(&lock);
+    acquire_spinlock(&lock);
     // TODO
-    return NULL;
+    Inode* inode;
+    _for_in_list(node, &head) {
+        inode = container_of(node, Inode, node);
+        if (inode->inode_no == inode_no) {
+            increment_rc(&inode->rc);
+            release_spinlock(&lock);
+            return inode;
+        }
+    }
+
+    // NOT FOUND
+    inode = (Inode*)kalloc(sizeof(Inode));
+    init_inode(inode);
+    inode->inode_no = inode_no;
+    increment_rc(&inode->rc);
+    
+    inode_lock(inode);
+    inode_sync(NULL, inode, false);
+    inode_unlock(inode);
+
+    inode->valid = true;
+    _insert_into_list(&head, &inode->node);
+
+    release_spinlock(&lock);
+    return inode;
 }
+
 // see `inode.h`.
 static void inode_clear(OpContext* ctx, Inode* inode) {
     // TODO
+    ASSERT(inode->rc.count > 0);
+
+    InodeEntry* entry = &inode->entry;
+    for (usize i = 0; i < INODE_NUM_DIRECT; i++) {
+        if (entry->addrs[i]) {
+            cache->free(ctx, entry->addrs[i]);
+        }
+    }
+
+    if (entry->indirect) {
+        Block* block = cache->acquire(entry->indirect);
+        u32* addrs = get_addrs(block);
+        for (usize i = 0; i < INODE_NUM_INDIRECT; i++) {
+            if (addrs[i]) {
+                cache->free(ctx, addrs[i]);
+            }
+        }
+        cache->release(block);
+        cache->free(ctx, entry->indirect);
+    }
+
+    entry->indirect = 0;
+    entry->num_bytes = 0;
+    memset(entry->addrs, 0, sizeof(entry->addrs));
+    inode_sync(ctx, inode, true);
 }
 
 // see `inode.h`.
 static Inode* inode_share(Inode* inode) {
     // TODO
-    return 0;
+    ASSERT(inode->rc.count > 0);
+    increment_rc(&inode->rc);
+    return inode;
 }
 
 // see `inode.h`.
 static void inode_put(OpContext* ctx, Inode* inode) {
     // TODO
+    ASSERT(inode->rc.count > 0);
+
+    acquire_spinlock(&lock);
+    if (inode->rc.count == 1 && inode->entry.num_links == 0) {
+        inode_lock(inode);
+        inode_clear(ctx, inode);
+        inode->entry.type = INODE_INVALID;
+        inode_sync(ctx, inode, true);
+        inode_unlock(inode);
+        _detach_from_list(&inode->node);
+        kfree(inode);
+    } else {
+        decrement_rc(&inode->rc);
+    }
+    release_spinlock(&lock);
 }
 
 /**
@@ -154,7 +258,45 @@ static usize inode_map(OpContext* ctx,
                        usize offset,
                        bool* modified) {
     // TODO
-    return 0;
+    InodeEntry* entry = &inode->entry;
+    usize block_idx = offset / BLOCK_SIZE;
+    usize block_no = 0;
+    if (block_idx < INODE_NUM_DIRECT) {
+        block_no = entry->addrs[block_idx];
+        if (block_no == 0) {
+            if (ctx == NULL) {
+                return 0;
+            }
+
+            block_no = cache->alloc(ctx);
+            entry->addrs[block_idx] = block_no;
+            *modified = true;
+        }
+    } else {
+        if (entry->indirect == 0) {
+            if (ctx == NULL) {
+                return 0;
+            }
+
+            entry->indirect = cache->alloc(ctx);
+            *modified = true;
+        }
+
+        IndirectBlock* indirect_block = (IndirectBlock*)cache->acquire(entry->indirect);
+        usize indirect_idx = block_idx - INODE_NUM_DIRECT;
+        block_no = get_addrs((Block*)indirect_block)[indirect_idx];
+        if (block_no == 0) {
+            if (ctx == NULL) {
+                return 0;
+            }
+            block_no = cache->alloc(ctx);
+            get_addrs((Block*)indirect_block)[indirect_idx] = block_no;
+            *modified = true;
+        }
+        cache->release((Block*)indirect_block);
+    }
+
+    return block_no;
 }
 
 // see `inode.h`.
@@ -168,7 +310,24 @@ static usize inode_read(Inode* inode, u8* dest, usize offset, usize count) {
     ASSERT(offset <= end);
 
     // TODO
-    return 0;
+    usize read_bytes = offset;
+    while (read_bytes < end) {
+        usize block_no = inode_map(NULL, inode, read_bytes, NULL);
+        if (block_no == 0) {
+            PANIC();
+        }
+
+        usize block_offset = read_bytes % BLOCK_SIZE;
+        usize bytes_to_read = MIN(BLOCK_SIZE - block_offset, end - read_bytes);
+
+        Block* block = cache->acquire(block_no);
+        memcpy(dest + read_bytes - offset, block->data + block_offset, bytes_to_read);
+        cache->release(block);
+
+        read_bytes += bytes_to_read;
+    }
+
+    return read_bytes - offset;
 }
 
 // see `inode.h`.
@@ -184,7 +343,30 @@ static usize inode_write(OpContext* ctx,
     ASSERT(offset <= end);
 
     // TODO
-    return 0;
+    usize written_bytes = offset;
+    while (written_bytes < end) {
+        bool modified;
+        usize block_no = inode_map(ctx, inode, written_bytes, &modified);
+        if (block_no == 0) {
+            PANIC();
+        }
+
+        usize block_offset = written_bytes % BLOCK_SIZE;
+        usize bytes_to_write = MIN(BLOCK_SIZE - block_offset, end - written_bytes);
+
+        Block* block = cache->acquire(block_no);
+        memcpy(block->data + block_offset, src + written_bytes - offset, bytes_to_write);
+        cache->sync(ctx, block);
+        cache->release(block);
+
+        written_bytes += bytes_to_write;
+    }
+    if (end > entry->num_bytes) {
+        entry->num_bytes = end;
+        inode_sync(ctx, inode, true);
+    }
+
+    return written_bytes - offset;
 }
 
 // see `inode.h`.
@@ -193,6 +375,19 @@ static usize inode_lookup(Inode* inode, const char* name, usize* index) {
     ASSERT(entry->type == INODE_DIRECTORY);
 
     // TODO
+    DirEntry dir_entry;
+    usize offset = 0;
+    usize idx = 0;
+    while (offset < entry->num_bytes) {
+        inode_read(inode, (u8*)&dir_entry, offset, sizeof(DirEntry));
+        if (dir_entry.inode_no != 0 && strncmp(dir_entry.name, name, FILE_NAME_MAX_LENGTH) == 0) {
+            if (index != NULL)
+                *index = idx;
+            return dir_entry.inode_no;
+        }
+        idx++;
+        offset += sizeof(DirEntry);
+    }
     return 0;
 }
 
@@ -205,12 +400,53 @@ static usize inode_insert(OpContext* ctx,
     ASSERT(entry->type == INODE_DIRECTORY);
 
     // TODO
-    return 0;
+    usize index;
+    if (inode_lookup(inode, name, &index) != 0) {
+        return -1;
+    }
+
+    DirEntry dir_entry;
+    u32 offset;
+    for (offset = 0; offset < entry->num_bytes; offset += sizeof(DirEntry)) {
+        inode_read(inode, (u8*)&dir_entry, offset, sizeof(DirEntry));
+        if (dir_entry.inode_no == 0) {
+            break;
+        }
+    }
+
+    dir_entry.inode_no = inode_no;
+    memmove(dir_entry.name, name, FILE_NAME_MAX_LENGTH);
+
+    usize num = inode_write(ctx, inode, (u8*)&dir_entry, offset, sizeof(DirEntry));
+    ASSERT(num == sizeof(DirEntry));
+
+    return offset / sizeof(DirEntry);
 }
 
 // see `inode.h`.
 static void inode_remove(OpContext* ctx, Inode* inode, usize index) {
     // TODO
+    ASSERT(inode->entry.type == INODE_DIRECTORY);
+    usize offset = index * sizeof(DirEntry);
+    if (offset >= inode->entry.num_bytes) {
+        return;
+    }
+
+    DirEntry dir_entry;
+    memset(&dir_entry, 0, sizeof(DirEntry));
+
+    usize num = inode_write(ctx, inode, (u8*)&dir_entry, index, sizeof(DirEntry));
+    ASSERT(num == sizeof(DirEntry));
+
+    while(inode->entry.num_bytes == index + sizeof(DirEntry)) {
+        inode_read(inode, (u8*)&dir_entry, index, sizeof(DirEntry));
+        if (!dir_entry.inode_no) {
+            inode->entry.num_bytes -= sizeof(DirEntry);
+        }
+        if (index) {
+            index -= sizeof(DirEntry);
+        }
+    }
 }
 
 InodeTree inodes = {

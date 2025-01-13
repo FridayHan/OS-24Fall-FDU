@@ -25,8 +25,11 @@ ListNode *_merge_list(ListNode *node1, ListNode *node2);
 ListNode *_detach_from_list(ListNode *node);
 // - walk through the list
 #define _for_in_list(valptr, list)                                  \
-    for (ListNode *__flag = (list), *valptr = __flag->next; valptr; \
+    for (ListNode *__flag = (list), *valptr = __flag->next; (void*)valptr; \
          valptr = valptr == __flag ? (void *)0 : valptr->next)
+
+// #define _for_in_list(valptr, list) for (ListNode *__flag = (list), *valptr = __flag->next; valptr != __flag; valptr = valptr->next)
+
 // - test if the list is empty
 #define _empty_list(list) ((list)->next == (list))
 

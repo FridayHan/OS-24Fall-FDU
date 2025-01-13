@@ -52,8 +52,8 @@ void kinit()
     }
     
     // 初始化free_pages
-    u64 start_addr = (round_up((u64)end, PAGE_SIZE)); // 可分配物理页的起始地址
-    for (u64 addr = start_addr; addr < P2K(PHYSTOP); addr += PAGE_SIZE) {
+    u64 start_addr = round_up(K2P((u64)end), PAGE_SIZE); // 可分配物理页的起始地址
+    for (u64 addr = start_addr; addr < PHYSTOP; addr += PAGE_SIZE) {
         Page* new_page = (Page*)addr;
         new_page->free_list_num = 0;
         new_page->block_size = 0;
@@ -117,7 +117,7 @@ void *kalloc_page()
     allocated_page->next = NULL;
 
     release_spinlock(&free_pages_lock);
-    return (void*)allocated_page;
+    return (void*)P2K(allocated_page);
 }
 
 void kfree_page(void *p)
@@ -132,7 +132,7 @@ void kfree_page(void *p)
     }
 
     // 将页插入到空闲页链表
-    Page* page = (Page*)(u64)p;
+    Page* page = (Page*)K2P((u64)p);
     page->next = free_pages;
     free_pages = page;
 
@@ -204,10 +204,10 @@ void kfree(void *ptr)
         return;
     }
 
-    // u64 phys_addr = K2P((u64)ptr);
-    // u64 page_phys_addr = phys_addr & ~(PAGE_SIZE - 1);
+    u64 phys_addr = K2P((u64)ptr);
+    u64 page_phys_addr = phys_addr & ~(PAGE_SIZE - 1);
 
-    void* page_virt_addr = (void*)((u64)ptr & ~(PAGE_SIZE - 1));
+    void* page_virt_addr = (void*)P2K(page_phys_addr);
     Page* page = (Page*)page_virt_addr;
     u16 block_size = page->block_size;
     int size_class = get_size_class(block_size);
@@ -257,8 +257,4 @@ void kfree(void *ptr)
 
     release_spinlock(&allocator.locks[size_class]);
     return;
-}
-
-void* get_zero_page() {
-    return NULL;
 }

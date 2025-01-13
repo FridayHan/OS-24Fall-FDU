@@ -3,6 +3,8 @@
 #include <kernel/printk.h>
 #include <kernel/sched.h>
 #include <test/test.h>
+#include <driver/virtio.h>
+#include <common/buf.h>
 
 volatile bool panic_flag;
 
@@ -12,7 +14,10 @@ NO_RETURN void idle_entry()
     while (1) {
         yield();
         if (panic_flag)
+        {
+            printk("CPU %lld: PANIC! Stopped.\n", cpuid());
             break;
+        }
         arch_with_trap
         {
             arch_wfi();
@@ -33,7 +38,14 @@ NO_RETURN void kernel_entry()
     // io_test();
 
     /* LAB 4 TODO 3 BEGIN */
-    
+    Buf b;
+    b.flags = 0;
+    b.block_no = (u32)0x0;
+    virtio_blk_rw(&b);
+    u8 *data = b.data;
+    int LBA = *(int *)(data + 0x1CE + 0x8);
+    int num = *(int *)(data + 0x1CE + 0xC);
+    printk("LBA:%d, num:%d\n", LBA, num);
     /* LAB 4 TODO 3 END */
 
     /**
