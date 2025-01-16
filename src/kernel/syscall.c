@@ -52,7 +52,7 @@ void syscall_entry(UserContext *context)
  */
 bool user_readable(const void *start, usize size) {
     /* (Final) TODO BEGIN */
-
+    
     /* (Final) TODO END */
 }
 

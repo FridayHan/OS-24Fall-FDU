@@ -526,7 +526,55 @@ static Inode* namex(const char* path,
                     char* name,
                     OpContext* ctx) {
     /* (Final) TODO BEGIN */
+    Inode* ip = inodes.root;  // 从根目录开始查找
+    Inode* parent = NULL;
+    const char* next_path = path;
     
+    // 如果路径是绝对路径，从根目录开始，跳过首个 '/'
+    if (*next_path == '/') {
+        next_path = skipelem(next_path, name);
+    }
+
+    // 遍历路径中的各个部分
+    while (next_path != NULL) {
+        // 查找下一个部分的目录或文件
+        if (ip->entry.type != INODE_DIRECTORY) {
+            // 如果当前目录不是目录类型，无法继续
+            printk("(error) namex: not a directory: %s\n", name);
+            return NULL;
+        }
+
+        // 查找文件名对应的 inode
+        usize inode_no = inode_lookup(ip, name, NULL);
+        if (inode_no == 0) {
+            // 如果找不到该条目
+            printk("(error) namex: inode not found: %s\n", name);
+            return NULL;
+        }
+
+        // 获取子目录的 inode
+        parent = ip;
+        ip = inodes.get(inode_no);
+
+        // 如果不是父目录查找，并且下一个路径部分是文件路径
+        if (!nameiparent && next_path[0] == '\0') {
+            // 如果是查找文件本身，并且路径结束，则返回当前 inode
+            return ip;
+        }
+
+        // 继续解析路径
+        next_path = skipelem(next_path, name);
+    }
+
+    // 如果是查找父目录，返回父目录的 inode，并将最后的文件名填充到 name 中
+    if (nameiparent) {
+        if (parent != NULL) {
+            memmove(name, next_path, strlen(next_path));
+            return parent;
+        }
+    }
+
+    return NULL;
     /* (Final) TODO END */
     return 0;
 }

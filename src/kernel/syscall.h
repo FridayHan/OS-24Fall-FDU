@@ -3,6 +3,7 @@
 #include <kernel/proc.h>
 
 #define NR_SYSCALL 512
+#define MAX_FILES_PER_PROCESS 1024
 
 extern void *syscall_table[NR_SYSCALL];
 

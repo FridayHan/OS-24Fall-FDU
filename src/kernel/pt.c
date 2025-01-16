@@ -148,6 +148,37 @@ void vmmap(struct pgdir *pd, u64 va, void *ka, u64 flags)
 int copyout(struct pgdir *pd, void *va, void *p, usize len)
 {
     /* (Final) TODO BEGIN */
+    // 遍历 len 字节，并逐页处理
+    u64 va_end = (u64)va + len;  // 目标虚拟地址空间的结束位置
+    u64 offset = (u64)va % PAGE_SIZE;  // 当前页的偏移量
+    u64 start_va = (u64)va;  // 开始虚拟地址
+    u64 start_pa = (u64)p;  // 源内存地址
 
+    // 每次处理一个完整的页
+    while (start_va < va_end) {
+        u64 va_page = start_va & ~(PAGE_SIZE - 1);  // 获取当前虚拟页的起始地址
+        u64 pa_page = start_pa & ~(PAGE_SIZE - 1);  // 获取当前物理页的起始地址
+        usize to_copy = PAGE_SIZE - (start_va - va_page);  // 计算剩余需要复制的字节数
+
+        // 限制复制长度，确保不超过剩余的空间
+        if (start_va + to_copy > va_end) {
+            to_copy = va_end - start_va;
+        }
+
+        // 获取页表项
+        PTEntriesPtr pte = get_pte(pd, va_page, true);  // 获取目标虚拟地址的页表项
+        if (pte == NULL) {
+            return -1;  // 如果页表项为 NULL，说明无法分配页
+        }
+
+        // 将源内存数据复制到目标虚拟地址
+        memcpy((void *)P2K(*pte) + (start_va - va_page), (void *)(pa_page + (start_pa - va_page)), to_copy);
+
+        // 更新地址
+        start_va += to_copy;
+        start_pa += to_copy;
+    }
+
+    return 0;  // 成功
     /* (Final) TODO END */
 }

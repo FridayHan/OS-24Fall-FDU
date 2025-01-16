@@ -37,7 +37,13 @@ struct iovec {
 static struct file *fd2file(int fd)
 {
     /* (Final) TODO BEGIN */
-    
+    if (fd < 0 || fd >= MAX_FILES_PER_PROCESS)
+        return NULL;  // 文件描述符无效
+
+    struct file *f = current->files[fd];  // 假设 current 代表当前进程，files 是文件描述符表
+    if (!f)
+        return NULL;  // 文件描述符未分配文件对象
+    return f;
     /* (Final) TODO END */
 }
 
@@ -48,7 +54,13 @@ static struct file *fd2file(int fd)
 int fdalloc(struct file *f)
 {
     /* (Final) TODO BEGIN */
-    
+    // 查找第一个空闲的文件描述符位置
+    for (int fd = 0; fd < MAX_FILES_PER_PROCESS; fd++) {
+        if (current->files[fd] == NULL) {
+            current->files[fd] = f;  // 将文件对象关联到文件描述符
+            return fd;  // 返回分配的文件描述符
+        }
+    }
     /* (Final) TODO END */
     return -1;
 }
@@ -123,7 +135,18 @@ define_syscall(writev, int fd, struct iovec *iov, int iovcnt)
 define_syscall(close, int fd)
 {
     /* (Final) TODO BEGIN */
-    
+    struct file *f = fd2file(fd);
+    if (!f)
+        return -1;
+
+    // 清理文件描述符资源
+    fd2file(fd) = NULL;  // 将文件描述符的文件对象指针设为 NULL，表示该描述符已关闭
+
+    // 执行文件关闭操作
+    file_close(f);
+
+    // 释放文件的内存资源
+    file_put(f);
     /* (Final) TODO END */
     return 0;
 }
@@ -261,7 +284,68 @@ Inode *create(const char *path, short type, short major, short minor,
               OpContext *ctx)
 {
     /* (Final) TODO BEGIN */
-    
+    // 检查路径是否合法
+    if (!user_strlen(path, 256))
+        return NULL;
+
+    // 查找路径父目录和文件名
+    char name[FILE_NAME_MAX_LENGTH];
+    Inode *dp = NULL;
+    if ((dp = nameiparent(path, name, ctx)) == NULL)
+        return NULL;  // 无法找到父目录，返回 NULL
+
+    // 锁住父目录
+    inodes.lock(dp);
+
+    // 检查路径上是否已有文件或目录
+    Inode *ip;
+    if ((ip = inodes.lookup(dp, name, NULL)) != NULL) {
+        inodes.unlock(dp);  // 路径已存在，解锁父目录
+        inodes.put(ctx, dp);  // 释放父目录
+        return ip;  // 返回现有的 Inode
+    }
+
+    // 创建新 inode
+    ip = inodes.alloc(type, major, minor);  // 分配新的 inode
+    if (!ip) {
+        inodes.unlock(dp);
+        inodes.put(ctx, dp);
+        return NULL;  // 分配 inode 失败，返回 NULL
+    }
+
+    // 处理目录创建的特殊情况
+    if (type == INODE_DIRECTORY) {
+        // 创建 "." 和 ".." 目录项
+        DirEntry dot_entry = { .inode_no = ip->entry.inode_no, .name = "." };
+        DirEntry dotdot_entry = { .inode_no = dp->entry.inode_no, .name = ".." };
+
+        // 添加 "." 和 ".." 目录项
+        if (inodes.write(ctx, ip, (u8 *)&dot_entry, 0, sizeof(dot_entry)) != sizeof(dot_entry) ||
+            inodes.write(ctx, ip, (u8 *)&dotdot_entry, sizeof(dot_entry), sizeof(dotdot_entry)) != sizeof(dotdot_entry)) {
+            inodes.free(ip);  // 释放创建的 inode
+            inodes.unlock(dp);
+            inodes.put(ctx, dp);
+            return NULL;  // 目录项写入失败，返回 NULL
+        }
+    }
+
+    // 将新 inode 加入父目录
+    DirEntry de = { .inode_no = ip->entry.inode_no, .name = name };
+    if (inodes.write(ctx, dp, (u8 *)&de, dp->entry.num_bytes, sizeof(de)) != sizeof(de)) {
+        inodes.free(ip);
+        inodes.unlock(dp);
+        inodes.put(ctx, dp);
+        return NULL;  // 写入目录项失败，释放 inode 并返回 NULL
+    }
+
+    // 更新父目录的链接计数
+    dp->entry.num_links++;
+    inodes.sync(ctx, dp, true);
+    inodes.unlock(dp);
+
+    // 返回新创建的 inode
+    inodes.put(ctx, dp);
+    return ip;
     /* (Final) TODO END */
     return 0;
 }
@@ -374,7 +458,33 @@ define_syscall(chdir, const char *path)
      * Change the cwd (current working dictionary) of current process to 'path'.
      * You may need to do some validations.
      */
-    
+    // 1. 验证路径
+    if (!user_strlen(path, 256))  // 确保路径的长度是合法的
+        return -1;
+
+    // 2. 获取目录的 Inode
+    OpContext ctx;
+    Inode *ip = NULL;
+    bcache.begin_op(&ctx);
+
+    // 查找路径对应的 Inode
+    if ((ip = namei(path, &ctx)) == NULL) {
+        bcache.end_op(&ctx);
+        return -1;  // 路径无效，返回错误
+    }
+
+    // 3. 检查目标路径是否是目录
+    if (ip->entry.type != INODE_DIRECTORY) {
+        bcache.end_op(&ctx);
+        return -1;  // 目标不是目录，返回错误
+    }
+
+    // 4. 设置进程的当前工作目录
+    current->cwd = ip;  // 假设 `current` 是当前进程的指针，`cwd` 为进程的工作目录
+
+    // 5. 清理
+    bcache.end_op(&ctx);
+
     /* (Final) TODO END */
 }
 
