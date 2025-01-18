@@ -2,13 +2,14 @@
 #include <common/string.h>
 #include <kernel/mem.h>
 #include <kernel/pt.h>
+#include <common/defines.h>
 
 PTEntriesPtr get_pte(struct pgdir *pgdir, u64 va, bool alloc)
 {
     // TODO:
     // Return a pointer to the PTE (Page Table Entry) for virtual address 'va'
     // If the entry not exists (NEEDN'T BE VALID), allocate it if alloc=true, or return NULL if false.
-    // THIS ROUTINUE GETS THE PTE, NOT THE PAGE DESCRIBED BY PTE.
+    // THIS ROUTINE GETS THE PTE, NOT THE PAGE DESCRIBED BY PTE.
 
     // 分配根页表
     if (!pgdir->pt) {
@@ -136,7 +137,12 @@ void attach_pgdir(struct pgdir *pgdir)
 void vmmap(struct pgdir *pd, u64 va, void *ka, u64 flags)
 {
     /* (Final) TODO BEGIN */
-
+    PTEntriesPtr pte = get_pte(pd, va, true);
+    if (!pte) {
+        printk("vmmap: get_pte failed\n");
+        return;
+    }
+    *pte = (u64)K2P(ka) | flags;
     /* (Final) TODO END */
 }
 
@@ -148,37 +154,22 @@ void vmmap(struct pgdir *pd, u64 va, void *ka, u64 flags)
 int copyout(struct pgdir *pd, void *va, void *p, usize len)
 {
     /* (Final) TODO BEGIN */
-    // 遍历 len 字节，并逐页处理
-    u64 va_end = (u64)va + len;  // 目标虚拟地址空间的结束位置
-    u64 offset = (u64)va % PAGE_SIZE;  // 当前页的偏移量
-    u64 start_va = (u64)va;  // 开始虚拟地址
-    u64 start_pa = (u64)p;  // 源内存地址
+    u64 start = (u64)va;
+    u64 end = start + len;
+    u64 va0, pa0;
+    usize n;
 
-    // 每次处理一个完整的页
-    while (start_va < va_end) {
-        u64 va_page = start_va & ~(PAGE_SIZE - 1);  // 获取当前虚拟页的起始地址
-        u64 pa_page = start_pa & ~(PAGE_SIZE - 1);  // 获取当前物理页的起始地址
-        usize to_copy = PAGE_SIZE - (start_va - va_page);  // 计算剩余需要复制的字节数
-
-        // 限制复制长度，确保不超过剩余的空间
-        if (start_va + to_copy > va_end) {
-            to_copy = va_end - start_va;
+    while (start < end) {
+        va0 = PGROUNDDOWN(start);
+        pa0 = P2K(PTE_ADDRESS(*get_pte(pd, va0, true)));
+        if (!pa0) {
+            return -1;
         }
-
-        // 获取页表项
-        PTEntriesPtr pte = get_pte(pd, va_page, true);  // 获取目标虚拟地址的页表项
-        if (pte == NULL) {
-            return -1;  // 如果页表项为 NULL，说明无法分配页
-        }
-
-        // 将源内存数据复制到目标虚拟地址
-        memcpy((void *)P2K(*pte) + (start_va - va_page), (void *)(pa_page + (start_pa - va_page)), to_copy);
-
-        // 更新地址
-        start_va += to_copy;
-        start_pa += to_copy;
+        n = MIN(PGSIZE - (start - va0), end - start);
+        memmove(pa0 + (start - va0), p, n);
+        start += n;
+        p += n;
     }
-
-    return 0;  // 成功
+    return 0;
     /* (Final) TODO END */
 }

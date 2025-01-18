@@ -270,7 +270,7 @@ int fork()
      * 1. Create a new child process.
      * 2. Copy the parent's memory space.
      * 3. Copy the parent's trapframe.
-     * 4. Set the parent of the new proc to the parent of the parent.
+     * 4. Set the parent of the new proc to current proc.
      * 5. Set the state of the new proc to RUNNABLE.
      * 6. Activate the new proc and return its pid.
      */
@@ -281,9 +281,20 @@ int fork()
     }
 
     // 2. 复制父进程的内存空间
-    
+    copy_sections(&thisproc()->pgdir.section_head, &child->pgdir.section_head);
 
-    /* (Final) TODO END */
+    // 3. 复制父进程的 trapframe
+    *child->ucontext = *thisproc()->ucontext;
+
+    // 4. 设置父进程为当前进程
+    set_parent_to_this(child);
+
+    // 5. 设置子进程状态为 RUNNABLE
+    child->state = RUNNABLE;
+
+    // 6. 激活子进程并返回其 pid
+    activate_proc(child);
+    return child->pid;
 }
 
 void init_pid_pool(int initial_pid_count) {

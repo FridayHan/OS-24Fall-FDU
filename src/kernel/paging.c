@@ -62,5 +62,30 @@ void copy_sections(ListNode *from_head, ListNode *to_head)
 {
     /* (Final) TODO BEGIN */
 
+    // 遍历父进程的section列表
+    _for_in_list(node, from_head) {
+        if (node == from_head) {
+            continue;
+        }
+        struct section *from_section = container_of(node, struct section, stnode);
+
+        // 分配新的section结构体
+        struct section *to_section = kalloc(sizeof(struct section));
+        if (!to_section) {
+            PANIC();
+        }
+        memcpy(to_section, from_section, sizeof(struct section));
+
+        // 复制文件指针和相关数据
+        if (from_section->flags & ST_FILE) {
+            to_section->fp = from_section->fp;
+            to_section->offset = from_section->offset;
+            to_section->length = from_section->length;
+        }
+
+        // 插入到子进程的section列表
+        _insert_into_list(to_head, &to_section->stnode);
+    }
+
     /* (Final) TODO END */
 }

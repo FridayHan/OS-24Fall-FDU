@@ -260,5 +260,8 @@ void kfree(void *ptr)
 }
 
 void* get_zero_page() {
+    /* (Final) TODO BEGIN */
+
+    /* (Final) TODO END */
     return NULL;
 }
