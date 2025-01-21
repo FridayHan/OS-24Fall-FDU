@@ -11,19 +11,22 @@
 #include <aarch64/trap.h>
 #include <fs/file.h>
 #include <fs/inode.h>
-#include <sys/fcntl.h>
+#include <fcntl.h>
 
 extern int fdalloc(struct file *f);
 
 int execve(const char *path, char *const argv[], char *const envp[])
 {
     /* (Final) TODO BEGIN */
-    // 打开文件
-    struct file *f = file_open(path, O_RDONLY);
+
+    // 使用 file_alloc 分配文件结构
+    struct file *f = file_alloc();
     if (!f) {
-        printk("execve: cannot open %s\n", path);
+        printk("execve: cannot allocate file\n");
         return -1;
     }
+
+    // 打开文件
 
     // 读取 ELF 头
     Elf64_Ehdr elf;
@@ -46,8 +49,10 @@ int execve(const char *path, char *const argv[], char *const envp[])
     // 加载程序段
     for (int i = 0; i < elf.e_phnum; i++) {
         Elf64_Phdr ph;
-        if (file_lseek(f, elf.e_phoff + i * sizeof(ph)) < 0 ||
-            file_read(f, (char *)&ph, sizeof(ph)) != sizeof(ph)) {
+
+        // 使用 file_lseek 和 file_read 读取程序头
+        f->off = elf.e_phoff + i * sizeof(ph);
+        if (file_read(f, (char *)&ph, sizeof(ph)) != sizeof(ph)) {
             printk("execve: read program header failed\n");
             file_close(f);
             free_pgdir(&new_pgdir);
@@ -63,7 +68,7 @@ int execve(const char *path, char *const argv[], char *const envp[])
         u64 off = ph.p_offset;
 
         // 分配内存
-        for (u64 addr = PGROUNDDOWN(va); addr < va + sz; addr += PAGE_SIZE) {
+        for (u64 addr = (va & ~(PAGE_SIZE - 1)); addr < va + sz; addr += PAGE_SIZE) {
             char *pa = kalloc_page();
             if (!pa) {
                 printk("execve: kalloc_page failed\n");
@@ -75,8 +80,10 @@ int execve(const char *path, char *const argv[], char *const envp[])
         }
 
         // 读取文件内容到内存
-        if (file_lseek(f, off) < 0 ||
-            file_read(f, (char *)PGROUNDDOWN(va), sz) != sz) {
+
+        // 使用 file_lseek 和 file_read 读取文件内容
+        f->off = off;
+        if (file_read(f, (char *)(va & ~(PAGE_SIZE - 1)), (isize)sz) != (isize)sz) {
             printk("execve: read file content failed\n");
             file_close(f);
             free_pgdir(&new_pgdir);

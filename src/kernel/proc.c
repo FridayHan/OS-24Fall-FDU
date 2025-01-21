@@ -282,6 +282,7 @@ int fork()
 
     // 2. 复制父进程的内存空间
     copy_sections(&thisproc()->pgdir.section_head, &child->pgdir.section_head);
+    // TODO: 复制PTE
 
     // 3. 复制父进程的 trapframe
     *child->ucontext = *thisproc()->ucontext;

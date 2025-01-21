@@ -32,10 +32,10 @@ NO_RETURN void kernel_entry()
     init_filesystem();
 
     printk("Hello world! (Core %lld)\n", cpuid());
-    // proc_test();
-    // vm_test();
-    // user_proc_test();
-    // io_test();
+    proc_test();
+    vm_test();
+    user_proc_test();
+    io_test();
     // pgfault_first_test();
     // pgfault_second_test();
 
@@ -55,8 +55,7 @@ NO_RETURN void kernel_entry()
      * 
      * Map init.S to user space and trap_return to run icode.
      */
-
-
+    PANIC();
     /* (Final) TODO END */
 }
 

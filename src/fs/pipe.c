@@ -7,48 +7,48 @@
 void init_pipe(Pipe *pi)
 {
     /* (Final) TODO BEGIN */
-
+    return;
     /* (Final) TODO END */
 }
 
 void init_read_pipe(File *readp, Pipe *pipe)
 {
     /* (Final) TODO BEGIN */
-
+    return;
     /* (Final) TODO END */
 }
 
 void init_write_pipe(File *writep, Pipe *pipe)
 {
     /* (Final) TODO BEGIN */
-
+    return;
     /* (Final) TODO END */
 }
 
 int pipe_alloc(File **f0, File **f1)
 {
     /* (Final) TODO BEGIN */
-
+    return 0;
     /* (Final) TODO END */
 }
 
 void pipe_close(Pipe *pi, int writable)
 {
     /* (Final) TODO BEGIN */
-
+    return;
     /* (Final) TODO END */
 }
 
 int pipe_write(Pipe *pi, u64 addr, int n)
 {
     /* (Final) TODO BEGIN */
-
+    return 0;
     /* (Final) TODO END */
 }
 
 int pipe_read(Pipe *pi, u64 addr, int n)
 {
     /* (Final) TODO BEGIN */
-
+    return 0;
     /* (Final) TODO END */
 }

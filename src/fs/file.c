@@ -5,6 +5,7 @@
 #include <fs/inode.h>
 #include <common/list.h>
 #include <kernel/mem.h>
+#include <fs/pipe.h>
 
 // the global file table.
 static struct ftable ftable;
@@ -24,6 +25,16 @@ void init_oftable(struct oftable *oftable) {
     // TODO: initialize your oftable for a new process.
     for (int i = 0; i < NFILE; i++) {
         oftable->fds[i] = -1;  // 将所有文件描述符初始化为无效的 -1
+    }
+}
+
+void free_oftable(struct oftable *oftable) {
+    // 释放进程文件表
+    for (int i = 0; i < NFILE; i++) {
+        if (oftable->fds[i] != -1) {
+            file_close(&ftable.files[oftable->fds[i]]);
+            oftable->fds[i] = -1;
+        }
     }
 }
 
@@ -61,9 +72,9 @@ void file_close(struct file* f) {
 
     if (f->ref == 0) {  // 如果引用计数为 0，关闭文件
         if (f->type == FD_INODE) {
-            inode_put(f->ip);  // 关闭硬盘文件时，减少 inode 的引用计数
+            inodes.put(NULL, f->ip);  // 添加 OpContext* 参数
         } else if (f->type == FD_PIPE) {
-            pipe_close(f->pipe);  // 关闭管道文件
+            pipe_close(f->pipe, 1);  // 添加 writable 参数
         }
         f->type = FD_NONE;  // 设置文件类型为无效状态
         f->off = 0;  // 重置偏移量
@@ -75,7 +86,8 @@ void file_close(struct file* f) {
 int file_stat(struct file* f, struct stat* st) {
     /* (Final) TODO BEGIN */
     if (f->type == FD_INODE) {
-        return stati(f->ip, st);  // 如果是硬盘文件，通过 inode 获取文件的元数据
+        stati(f->ip, st);  // 修改为直接调用 stati 函数
+        return 0;
     }
     /* (Final) TODO END */
     return -1;
@@ -85,9 +97,17 @@ int file_stat(struct file* f, struct stat* st) {
 isize file_read(struct file* f, char* addr, isize n) {
     /* (Final) TODO BEGIN */
     if (f->type == FD_INODE) {
-        return inode_read(f->ip, addr, n, &f->off);  // 从硬盘文件读取数据
+        isize result = inodes.read(f->ip, (u8*)addr, f->off, n);  // 修改参数类型为 u8*
+        if (result > 0) {
+            f->off += result;  // 更新偏移量
+        }
+        return result;
     } else if (f->type == FD_PIPE) {
-        return pipe_read(f->pipe, addr, n);  // 从管道文件读取数据
+        isize result = pipe_read(f->pipe, (u64)addr, n);  // 将 char* 转换为 u64
+        if (result > 0) {
+            f->off += result;  // 更新偏移量
+        }
+        return result;
     }
     printk("file_read: unknown file type\n");
     /* (Final) TODO END */
@@ -98,9 +118,17 @@ isize file_read(struct file* f, char* addr, isize n) {
 isize file_write(struct file* f, char* addr, isize n) {
     /* (Final) TODO BEGIN */
     if (f->type == FD_INODE) {
-        return inode_write(f->ip, addr, n, &f->off);  // 向硬盘文件写入数据
+        isize result = inodes.write(NULL, f->ip, (u8*)addr, f->off, n);  // 添加 OpContext* 参数，修改参数类型为 u8*
+        if (result > 0) {
+            f->off += result;  // 更新偏移量
+        }
+        return result;
     } else if (f->type == FD_PIPE) {
-        return pipe_write(f->pipe, addr, n);  // 向管道文件写入数据
+        isize result = pipe_write(f->pipe, (u64)addr, n);  // 将 char* 转换为 u64
+        if (result > 0) {
+            f->off += result;  // 更新偏移量
+        }
+        return result;
     }
     printk("file_write: unknown file type\n");
     /* (Final) TODO END */

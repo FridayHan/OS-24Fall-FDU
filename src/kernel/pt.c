@@ -160,7 +160,7 @@ int copyout(struct pgdir *pd, void *va, void *p, usize len)
     usize n;
 
     while (start < end) {
-        va0 = PGROUNDDOWN(start);
+        va0 = (start & ~(PAGE_SIZE - 1));
         pa0 = P2K(PTE_ADDRESS(*get_pte(pd, va0, true)));
         if (!pa0) {
             return -1;

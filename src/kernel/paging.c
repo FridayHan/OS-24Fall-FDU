@@ -36,7 +36,7 @@ u64 sbrk(i64 size) {
      * Return the previous heap_end.
      */
 
-    
+    return 0;    
     /* (Final) TODO END */
 }
 
@@ -54,7 +54,9 @@ int pgfault_handler(u64 iss) {
      * 3. Handle the page fault accordingly.
      * 4. Return to user code or kill the process.
      */
-
+    printk("pd: %p\n", pd);
+    printk("addr: %lld\n", addr);
+    return 0;
     /* (Final) TODO END */
 }
 
