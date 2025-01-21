@@ -14,7 +14,7 @@ static PagedAllocator allocator;
 static Page* free_pages = NULL;
 static SpinLock free_pages_lock;
 
-u16 align_size(u16 size) {
+unsigned long long align_size(unsigned long long size) {
     for (int i = 0; i < MAX_SIZE_CLASS; i++) {
         if (size <= size_classes[i]) {
             return size_classes[i];
@@ -26,7 +26,7 @@ u16 align_size(u16 size) {
     // return round_up(size, 8);
 }
 
-int get_size_class(u16 size) {
+int get_size_class(unsigned long long size) {
     for (int i = 0; i < MAX_SIZE_CLASS; i++) {
         if (size <= size_classes[i]) {
             return i;
@@ -67,7 +67,7 @@ void kinit()
     return;
 }
 
-void kinit_page(Page* page, u16 block_size)
+void kinit_page(Page* page, unsigned long long block_size)
 {
     // ERROR: 检查页是否为空
     if (!page) {
@@ -82,10 +82,10 @@ void kinit_page(Page* page, u16 block_size)
     page->next = NULL;
 
     // 初始化页内的自由块链表
-    u16 block_offset = (u16)round_up((u64)(sizeof(Page)), (u64)block_size);
+    unsigned long long block_offset = (unsigned long long)round_up((u64)(sizeof(Page)), (u64)block_size);
     for (int i = 0; i < page->free_list_num; i++) {
-        *(u16*)((char*)page + block_offset) = page->free_list_offset;
-        page->free_list_offset = (u16)block_offset;
+        *(unsigned long long*)((char*)page + block_offset) = page->free_list_offset;
+        page->free_list_offset = (unsigned long long)block_offset;
         block_offset += block_size;
     }
     
@@ -140,23 +140,23 @@ void kfree_page(void *p)
     return;
 }
 
-void *kalloc(u16 size)
+void *kalloc(unsigned long long size)
 {
     // ERROR: 检查请求的大小是否合法
     if (size == 0 || size > PAGE_SIZE / 2) {
-        printk("kalloc error: size error. Requested size: %u.\n", size);
+        printk("kalloc error: size error. Requested size: %llu.\n", size);
         return NULL;
     }
 
     // 对齐请求的大小
-    u16 aligned_size = align_size(size);
+    unsigned long long aligned_size = align_size(size);
     int size_class = get_size_class(aligned_size);
 
     acquire_spinlock(&allocator.locks[size_class]);
 
     // ERROR: 没有合适的大小类别
     if (size_class == -1) {
-        printk("kalloc: No suitable size class for size %u.\n", aligned_size);
+        printk("kalloc: No suitable size class for size %llu.\n", aligned_size);
         return NULL;
     }
 
@@ -174,8 +174,8 @@ void *kalloc(u16 size)
         kinit_page(page, aligned_size);
     }
 
-    u16 block_offset = page->free_list_offset;
-    page->free_list_offset = *(u16*)((char*)page + block_offset);
+    unsigned long long block_offset = page->free_list_offset;
+    page->free_list_offset = *(unsigned long long*)((char*)page + block_offset);
     page->free_list_num--;
 
     if (page->free_list_num == 0) {
@@ -209,12 +209,12 @@ void kfree(void *ptr)
 
     void* page_virt_addr = (void*)((u64)ptr & ~(PAGE_SIZE - 1));
     Page* page = (Page*)page_virt_addr;
-    u16 block_size = page->block_size;
+    unsigned long long block_size = page->block_size;
     int size_class = get_size_class(block_size);
 
     // ERROR: 检查释放的块是否合法
     if (size_class == -1) {
-        printk("kfree: Invalid block size %u.\n", block_size);
+        printk("kfree: Invalid block size %llu.\n", block_size);
         return;
     }
 
@@ -222,8 +222,8 @@ void kfree(void *ptr)
 
     bool was_full = (page->free_list_num == 0);
 
-    *(u16*)ptr = page->free_list_offset;
-    page->free_list_offset = (u16)((char*)ptr - (char*)page);
+    *(unsigned long long*)ptr = page->free_list_offset;
+    page->free_list_offset = (unsigned long long)((char*)ptr - (char*)page);
     page->free_list_num++;
 
     // 若页变free，则插入到allocator.free_pages

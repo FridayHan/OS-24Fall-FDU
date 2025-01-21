@@ -165,8 +165,8 @@ int copyout(struct pgdir *pd, void *va, void *p, usize len)
         if (!pa0) {
             return -1;
         }
-        n = MIN(PGSIZE - (start - va0), end - start);
-        memmove(pa0 + (start - va0), p, n);
+        n = MIN(PAGE_SIZE - (start - va0), end - start);
+        memmove((void *)(pa0 + (start - va0)), p, n);
         start += n;
         p += n;
     }

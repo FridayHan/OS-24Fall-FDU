@@ -78,14 +78,14 @@ define_syscall(mmap, void *addr, int length, int prot, int flags, int fd,
                int offset)
 {
     /* (Final) TODO BEGIN */
-    
+    return -1;
     /* (Final) TODO END */
 }
 
 define_syscall(munmap, void *addr, size_t length)
 {
     /* (Final) TODO BEGIN */
-    
+    return -1;
     /* (Final) TODO END */
 }
 
