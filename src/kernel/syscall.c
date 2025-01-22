@@ -5,9 +5,12 @@
 #include <test/test.h>
 #include <aarch64/intrinsic.h>
 #include <kernel/paging.h>
+// #include <kernel/sysproc.c>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Woverride-init"
+
+extern u64 sys_execve();
 
 void init_syscall()
 {
@@ -17,6 +20,10 @@ void init_syscall()
 
 void *syscall_table[NR_SYSCALL] = {
     [0 ... NR_SYSCALL - 1] = NULL,
+    // [SYS_exit] = (void *)sys_exit,
+    // [SYS_chdir] = (void *)sys_chdir,
+    // [SYS_clone] = (void *)sys_clone,
+    // [SYS_execve] = (void *)sys_execve,
     [SYS_myreport] = (void *)syscall_myreport,
 };
 
@@ -27,7 +34,7 @@ void syscall_entry(UserContext *context)
     // id is stored in x8. args are stored in x0-x5. return value is stored in x0.
     // be sure to check the range of id. if id >= NR_SYSCALL, panic.
 
-    // printk("syscall_entry\n");
+    printk("syscall_entry\n");
     u64 syscall_id = context->x[8];
     u64 x[5];
     for (int i = 0; i <= 5; i++) {

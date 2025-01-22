@@ -9,7 +9,8 @@
 #include <common/list.h>
 
 // maximum number of open files in the whole system.
-#define NFILE 65536  
+#define NFILE 65536
+#define OFILE 256
 
 typedef struct file {
     // type of the file.
@@ -37,7 +38,7 @@ struct ftable {
 
 struct oftable {
     // TODO: table of opened file descriptors in a process
-    int fds[NFILE];
+    int fds[OFILE];
 };
 
 // initialize the global file table.

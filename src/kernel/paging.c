@@ -15,13 +15,48 @@
 
 void init_sections(ListNode *section_head) {
     /* (Final) TODO BEGIN */
+    struct section *text_section = kalloc(sizeof(struct section));
+    text_section->flags = ST_TEXT;
+    text_section->begin = 0x10000000;  // 假设代码段的起始地址
+    text_section->end = 0x20000000;    // 假设代码段的结束地址
+    _insert_into_list(section_head, &text_section->stnode);
 
+    struct section *data_section = kalloc(sizeof(struct section));
+    data_section->flags = ST_DATA;
+    data_section->begin = 0x20000000;
+    data_section->end = 0x30000000;
+    _insert_into_list(section_head, &data_section->stnode);
+
+    // TODO: other sections
     /* (Final) TODO END */
 }
 
 void free_sections(struct pgdir *pd) {
     /* (Final) TODO BEGIN */
-    
+    _for_in_list(node, &pd->section_head) {
+        if (node == &pd->section_head) {
+            continue; // 跳过链表头节点
+        }
+
+        struct section *sec = container_of(node, struct section, stnode);
+
+        // 如果是文件映射区域，需要处理文件相关的资源
+        if (sec->flags & ST_FILE) {
+            // 释放文件相关资源
+            if (sec->fp) {
+                // TODO: 释放或关闭文件描述符
+                // 可以考虑将文件的引用计数减1，当计数为0时释放文件
+
+            }
+        }
+
+        // TODO: 如果是其他类型的映射（例如堆/栈），释放相关资源
+        // 这里可以根据具体情况处理物理页面的释放等
+
+        // 移除该section节点并释放section结构体
+        _detach_from_list(node);
+        kfree(sec);  // 释放section结构体
+    }
     /* (Final) TODO END */
 }
 
@@ -54,8 +89,42 @@ int pgfault_handler(u64 iss) {
      * 3. Handle the page fault accordingly.
      * 4. Return to user code or kill the process.
      */
-    printk("pd: %p\n", pd);
-    printk("addr: %lld\n", addr);
+    // 遍历进程的section链表，找到包含该地址的section
+    struct section *fault_section = NULL;
+    _for_in_list(node, &pd->section_head) {
+        if (node == &pd->section_head) continue;
+
+        struct section *sec = container_of(node, struct section, stnode);
+        if (addr >= sec->begin && addr < sec->end) {
+            fault_section = sec;
+            break;
+        }
+    }
+
+    if (!fault_section) {
+        // 如果找不到对应的section，处理为非法访问
+        printk("Page fault at addr %llx: invalid address\n", addr);
+        return -1;  // 错误处理：可以考虑杀死进程或其他处理
+    }
+
+    // 根据section的flags来判断处理逻辑
+    if (fault_section->flags & ST_RO) {
+        // 只读区域，发生写操作导致页面故障
+        printk("Write to read-only memory at addr %llx\n", addr);
+        return -1;  // 错误处理
+    } else if (fault_section->flags & ST_SWAP) {
+        // 如果是swap区，可能需要将页交换回内存
+        printk("Handle swap page fault for addr %llx\n", addr);
+        // TODO: 从swap中加载数据
+    } else if (fault_section->flags & ST_FILE) {
+        // 文件映射区域，可能需要从文件加载数据
+        printk("File-backed memory access at addr %llx\n", addr);
+        // TODO: 从文件中加载数据
+    } else {
+        // 未知的处理方式
+        printk("Unknown page fault at addr %llx\n", addr);
+        return -1;  // 错误处理
+    }
     return 0;
     /* (Final) TODO END */
 }
@@ -63,7 +132,6 @@ int pgfault_handler(u64 iss) {
 void copy_sections(ListNode *from_head, ListNode *to_head)
 {
     /* (Final) TODO BEGIN */
-
     // 遍历父进程的section列表
     _for_in_list(node, from_head) {
         if (node == from_head) {
@@ -88,6 +156,5 @@ void copy_sections(ListNode *from_head, ListNode *to_head)
         // 插入到子进程的section列表
         _insert_into_list(to_head, &to_section->stnode);
     }
-
     /* (Final) TODO END */
 }

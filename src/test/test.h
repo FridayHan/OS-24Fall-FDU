@@ -9,8 +9,8 @@ void proc_test();
 void vm_test();
 void user_proc_test();
 void io_test();
-// pgfault_first_test();
-// pgfault_second_test();
+void pgfault_first_test();
+void pgfault_second_test();
 unsigned rand();
 void srand(unsigned seed);
 

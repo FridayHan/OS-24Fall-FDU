@@ -261,7 +261,11 @@ void kfree(void *ptr)
 
 void* get_zero_page() {
     /* (Final) TODO BEGIN */
-
-    /* (Final) TODO END */
     return NULL;
+    /* (Final) TODO END */
+}
+
+u64 left_page_cnt()
+{
+    return 0;
 }

@@ -286,6 +286,9 @@ int fork()
 
     // 3. 复制父进程的 trapframe
     *child->ucontext = *thisproc()->ucontext;
+    child->ucontext->x[0] = 0; // 子进程返回值为 0
+    child->ucontext->elr = (u64)trap_return;
+    child->ucontext->sp = (u64)get_zero_page();
 
     // 4. 设置父进程为当前进程
     set_parent_to_this(child);

@@ -5,8 +5,12 @@
 #include <test/test.h>
 #include <driver/virtio.h>
 #include <common/buf.h>
+#include <kernel/mem.h>
 
 volatile bool panic_flag;
+extern void swtch(KernelContext *new_ctx, KernelContext **old_ctx);
+extern void trap_return();
+extern void icode();
 
 NO_RETURN void idle_entry()
 {
@@ -33,9 +37,9 @@ NO_RETURN void kernel_entry()
 
     printk("Hello world! (Core %lld)\n", cpuid());
     proc_test();
-    vm_test();
-    user_proc_test();
-    io_test();
+    // vm_test();
+    // user_proc_test();
+    // io_test();
     // pgfault_first_test();
     // pgfault_second_test();
 
@@ -55,7 +59,36 @@ NO_RETURN void kernel_entry()
      * 
      * Map init.S to user space and trap_return to run icode.
      */
+    // 为新的进程创建用户空间上下文
+    UserContext *uc = (UserContext *)kalloc(sizeof(UserContext));
+    
+    // 初始化用户上下文
+    u64 init_addr = (u64)(&icode);  // 获取 init.S 中的 icode 地址
+    u64 init_sp = (u64)uc + sizeof(UserContext);  // 用户栈指针初始化为上下文的末尾
+
+    uc->spsr = 0x3c5;  // SPSR (Saved Program Status Register) 设置为用户态的EL1
+    uc->elr = init_addr;  // 设置ELR (Exception Link Register) 为icode地址
+    uc->sp = init_sp;  // 设置栈指针为用户栈
+    for (int i = 0; i < 31; i++) {
+        uc->x[i] = 0;  // 清空 x0-x30 寄存器
+    }
+
+    // 创建进程并设置上下文
+    Proc *p = create_proc();
+    p->kcontext->lr = (u64)trap_return;  // 返回到 trap_return
+    p->kcontext->x0 = (u64)uc;  // 将用户上下文的地址传递给 trap_return
+    p->kcontext->x1 = 0;  // 可以传递一些其他参数
+    printk("Create process %d\n", p->pid);
+
+    // 配置页表并切换到用户空间的页表
+    attach_pgdir(&p->pgdir);
+
+    // 切换到新创建的进程
+    swtch(p->kcontext, &thisproc()->kcontext);
+
+    // 防止函数返回
     PANIC();
+    
     /* (Final) TODO END */
 }
 

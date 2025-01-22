@@ -8,6 +8,7 @@
 #include <kernel/pt.h>
 #include <kernel/mem.h>
 #include <kernel/paging.h>
+#include <kernel/printk.h>
 #include <aarch64/trap.h>
 #include <fs/file.h>
 #include <fs/inode.h>
@@ -18,7 +19,7 @@ extern int fdalloc(struct file *f);
 int execve(const char *path, char *const argv[], char *const envp[])
 {
     /* (Final) TODO BEGIN */
-
+    printk("execve: path=%s\n", path);
     // 使用 file_alloc 分配文件结构
     struct file *f = file_alloc();
     if (!f) {

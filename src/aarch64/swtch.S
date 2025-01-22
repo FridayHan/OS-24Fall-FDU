@@ -5,7 +5,7 @@
 #define pushp(a, b) stp a, b, [sp, #-0x10]!
 #define popp(a, b) ldp a, b, [sp], #0x10 
 
-.globl swtch
+.global swtch
 swtch:
 pushp(x28, x29)
 pushp(x26, x27)
