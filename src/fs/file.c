@@ -23,18 +23,8 @@ void init_ftable() {
 
 void init_oftable(struct oftable *oftable) {
     // TODO: initialize your oftable for a new process.
-    for (int i = 0; i < NFILE; i++) {
-        oftable->fds[i] = -1;  // 将所有文件描述符初始化为无效的 -1
-    }
-}
-
-void free_oftable(struct oftable *oftable) {
-    // 释放进程文件表
-    for (int i = 0; i < NFILE; i++) {
-        if (oftable->fds[i] != -1) {
-            file_close(&ftable.files[oftable->fds[i]]);
-            oftable->fds[i] = -1;
-        }
+    for (int i = 0; i < NOFILE; i++) {
+        oftable->ofiles[i] = NULL;
     }
 }
 
@@ -42,21 +32,20 @@ void free_oftable(struct oftable *oftable) {
 struct file* file_alloc() {
     /* (Final) TODO BEGIN */
     for (int i = 0; i < NFILE; i++) {
-        if (ftable.files[i].ref == 0) {  // 找到一个未被使用的文件
-            ftable.files[i].ref = 1;  // 设置引用计数为 1
-            return &ftable.files[i];  // 返回该文件对象
+        if (ftable.files[i].ref == 0) {
+            ftable.files[i].ref = 1;
+            return &ftable.files[i];
         }
     }
     printk("file_alloc: no free file\n");
-    return NULL;
     /* (Final) TODO END */
-    return 0;
+    return NULL;
 }
 
 /* Increment ref count for file f. */
 struct file* file_dup(struct file* f) {
     /* (Final) TODO BEGIN */
-    f->ref++;  // 引用计数增加
+    f->ref++;
     /* (Final) TODO END */
     return f;
 }

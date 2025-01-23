@@ -15,19 +15,22 @@
 
 void init_sections(ListNode *section_head) {
     /* (Final) TODO BEGIN */
-    struct section *text_section = kalloc(sizeof(struct section));
-    text_section->flags = ST_TEXT;
-    text_section->begin = 0x10000000;  // 假设代码段的起始地址
-    text_section->end = 0x20000000;    // 假设代码段的结束地址
-    _insert_into_list(section_head, &text_section->stnode);
+    // 初始化section链表
+    init_list_node(section_head);
 
-    struct section *data_section = kalloc(sizeof(struct section));
-    data_section->flags = ST_DATA;
-    data_section->begin = 0x20000000;
-    data_section->end = 0x30000000;
-    _insert_into_list(section_head, &data_section->stnode);
+    // struct section *text_section = kalloc(sizeof(struct section));
+    // text_section->flags = ST_TEXT;
+    // text_section->begin = 0x10000000;  // 假设代码段的起始地址
+    // text_section->end = 0x20000000;    // 假设代码段的结束地址
+    // _insert_into_list(section_head, &text_section->stnode);
 
-    // TODO: other sections
+    // struct section *data_section = kalloc(sizeof(struct section));
+    // data_section->flags = ST_DATA;
+    // data_section->begin = 0x20000000;
+    // data_section->end = 0x30000000;
+    // _insert_into_list(section_head, &data_section->stnode);
+
+    // // TODO: other sections
     /* (Final) TODO END */
 }
 
@@ -95,6 +98,7 @@ int pgfault_handler(u64 iss) {
         if (node == &pd->section_head) continue;
 
         struct section *sec = container_of(node, struct section, stnode);
+        printk("section begin: %llx, end: %llx\n", sec->begin, sec->end);
         if (addr >= sec->begin && addr < sec->end) {
             fault_section = sec;
             break;
@@ -104,7 +108,7 @@ int pgfault_handler(u64 iss) {
     if (!fault_section) {
         // 如果找不到对应的section，处理为非法访问
         printk("Page fault at addr %llx: invalid address\n", addr);
-        return -1;  // 错误处理：可以考虑杀死进程或其他处理
+        return -1;
     }
 
     // 根据section的flags来判断处理逻辑

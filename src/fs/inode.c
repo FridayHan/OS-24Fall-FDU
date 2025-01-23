@@ -576,7 +576,6 @@ static Inode* namex(const char* path,
 
     return NULL;
     /* (Final) TODO END */
-    return 0;
 }
 
 Inode* namei(const char* path, OpContext* ctx) {

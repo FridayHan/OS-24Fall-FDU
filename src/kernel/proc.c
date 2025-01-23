@@ -275,17 +275,25 @@ int fork()
      * 6. Activate the new proc and return its pid.
      */
     // 1. 创建新的子进程
+    Proc *p = thisproc();
     Proc *child = create_proc();
     if (!child) {
         return -1;
     }
 
     // 2. 复制父进程的内存空间
-    copy_sections(&thisproc()->pgdir.section_head, &child->pgdir.section_head);
-    // TODO: 复制PTE
+    copy_sections(&p->pgdir.section_head, &child->pgdir.section_head);
+    for (int fd = 0; fd < NOFILE; fd++)
+    {
+        if (p->oftable.ofiles[fd])
+        {
+            child->oftable.ofiles[fd] = file_dup(p->oftable.ofiles[fd]);
+        }
+    }
+    child->cwd = p->cwd;
 
     // 3. 复制父进程的 trapframe
-    *child->ucontext = *thisproc()->ucontext;
+    *child->ucontext = *p->ucontext;
     child->ucontext->x[0] = 0; // 子进程返回值为 0
     child->ucontext->elr = (u64)trap_return;
     child->ucontext->sp = (u64)get_zero_page();

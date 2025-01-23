@@ -7,10 +7,11 @@
 #include <fs/inode.h>
 #include <sys/stat.h>
 #include <common/list.h>
+#include <common/spinlock.h>
 
 // maximum number of open files in the whole system.
 #define NFILE 65536
-#define OFILE 256
+#define NOFILE 64
 
 typedef struct file {
     // type of the file.
@@ -34,11 +35,12 @@ struct ftable {
     // TODO: table of file objects in the system
     File files[NFILE];
     // Note: you may need a lock to prevent concurrent access to the table!
+    SpinLock file_lock;
 };
 
 struct oftable {
     // TODO: table of opened file descriptors in a process
-    int fds[OFILE];
+    File* ofiles[NOFILE];
 };
 
 // initialize the global file table.

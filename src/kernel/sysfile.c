@@ -36,8 +36,12 @@ struct iovec {
  */
 static struct file *fd2file(int fd)
 {
-    /* (Final) TODO BEGIN */
-    return NULL;
+    /* (Final) TODO BEGIN */ // TODO: DONE
+    struct oftable *oft = &thisproc()->oftable;
+    if (fd < 0 || fd >= NOFILE || oft->ofiles[fd] == 0) {
+        return NULL;
+    }
+    return oft->ofiles[fd];
     /* (Final) TODO END */
 }
 
@@ -47,8 +51,16 @@ static struct file *fd2file(int fd)
  */
 int fdalloc(struct file *f)
 {
-    /* (Final) TODO BEGIN */
-    // 查找第一个空闲的文件描述符位置
+    /* (Final) TODO BEGIN */ // TODO: DONE
+    Proc* p = thisproc();
+    for (int fd = 0; fd < NOFILE; fd++)
+    {
+        if (p->oftable.ofiles[fd] == 0)
+        {
+            p->oftable.ofiles[fd] = f;
+            return fd;
+        }
+    }
     return -1;
     /* (Final) TODO END */
 }
@@ -139,7 +151,7 @@ define_syscall(close, int fd)
 
     // 清理文件描述符资源
     struct oftable *oft = &thisproc()->oftable;  // 使用 oftable 结构体
-    oft->fds[fd] = -1;  // 使用 oftable 结构体
+    oft->ofiles[fd] = 0;  // 使用 oftable 结构体
 
     // 执行文件关闭操作
     file_close(f);
@@ -238,7 +250,7 @@ define_syscall(unlinkat, int fd, const char *path, int flag)
     }
 
     memset(&de, 0, sizeof(de));
-    if (inodes.write(&ctx, dp, (u8 *)&de, off, sizeof(de)) != sizeof(de))
+    if (inodes.write(&ctx, dp, (u8 *)&de, sizeof(de) * off, sizeof(de)) != sizeof(de))
         PANIC();
     if (ip->entry.type == INODE_DIRECTORY) {
         dp->entry.num_links--;
