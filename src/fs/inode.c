@@ -68,10 +68,7 @@ void init_inodes(const SuperBlock* _sblock, const BlockCache* _cache) {
     if (ROOT_INODE_NO < sblock->num_inodes)
         inodes.root = inodes.get(ROOT_INODE_NO);
     else
-    {
-        printk("ROOT_INODE_NO: %d, sblock->num_inodes: %d\n", ROOT_INODE_NO, sblock->num_inodes);
         printk("(warn) init_inodes: no root inode.\n");
-    }
 }
 
 // initialize in-memory inode.
@@ -89,7 +86,6 @@ static usize inode_alloc(OpContext* ctx, InodeType type) {
 
     // TODO
     usize inum = 1;
-    // printk("sblock->num_inodes: %d\n", sblock->num_inodes);
 
     while (inum < sblock->num_inodes) {
         usize block_no = to_block_no(inum);
@@ -168,10 +164,10 @@ static Inode* inode_get(usize inode_no) {
     increment_rc(&inode->rc);
     
     inode_lock(inode);
-    printk("inode_get: inode_lock\n");
+    // printk("inode_get: inode_lock\n");
     inode_sync(NULL, inode, false);
     inode_unlock(inode);
-    printk("inode_get: inode_unlock\n");
+    // printk("inode_get: inode_unlock\n");
 
     inode->valid = true;
     _insert_into_list(&head, &inode->node);

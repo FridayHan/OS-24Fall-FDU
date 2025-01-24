@@ -28,13 +28,6 @@ static void sd_read(usize block_no, u8 *buffer)
  */
 static void sd_write(usize block_no, u8 *buffer) {
     Buf b;
-    b.flags = 0;
-    b.block_no = (u32)0x0;
-    virtio_blk_rw(&b);
-    u8 *data = b.data;
-    LBA = *(int *)(data + 0x1CE + 0x8);
-    int num = *(int *)(data + 0x1CE + 0xC);
-    printk("LBA:%d, num:%d\n", LBA, num);
     b.block_no = (u32)block_no;
     b.flags = B_DIRTY | B_VALID;
     memcpy(b.data, buffer, BLOCK_SIZE);

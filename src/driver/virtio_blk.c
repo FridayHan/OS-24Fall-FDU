@@ -148,7 +148,7 @@ static void virtio_blk_intr()
         Buf *b = container_of((void *)disk.virtq.info[d0].buf, Buf, data);
         disk.virtq.info[d0].done = 1;
         post_sem(&b->sem);
-        printk("virtio_blk.c: post_sem %p\n", &b->sem);
+        // printk("virtio_blk.c: post_sem %p\n", &b->sem);
         /* LAB 4 TODO 2 END */
 
         disk.virtq.info[d0].buf = NULL;

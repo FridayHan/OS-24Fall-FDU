@@ -126,7 +126,7 @@ int wait(int *exitcode)
     }
 
     wait_sem(&this->childexit);
-    printk("proc.c: wait_sem %p\n", &this->childexit);
+    // printk("proc.c: wait_sem %p\n", &this->childexit);
     acquire_spinlock(&proc_lock);
 
     _for_in_list(node, &this->children)
@@ -173,12 +173,12 @@ NO_RETURN void exit(int code)
         _insert_into_list(root_proc.children.prev, node);
         if (is_zombie(cp)) {
             post_sem(&root_proc.childexit);
-            printk("proc.c: post_sem %p\n", &root_proc.childexit);
+            // printk("proc.c: post_sem %p\n", &root_proc.childexit);
         }
     }
 
     post_sem(&this->parent->childexit);
-    printk("proc.c: post_sem %p\n", &this->parent->childexit);
+    // printk("proc.c: post_sem %p\n", &this->parent->childexit);
 
     // free_pgdir(&this->pgdir);
 

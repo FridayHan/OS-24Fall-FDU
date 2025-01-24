@@ -34,9 +34,7 @@ NO_RETURN void idle_entry()
 
 NO_RETURN void kernel_entry()
 {
-    init_filesystem();
-
-    printk("Hello world! (Core %lld)\n", cpuid());
+    // printk("Hello world! (Core %lld)\n", cpuid());
     // proc_test();
     // vm_test();
     // user_proc_test();
@@ -54,6 +52,7 @@ NO_RETURN void kernel_entry()
     int num = *(int *)(data + 0x1CE + 0xC);
     printk("LBA:%d, num:%d\n", LBA, num);
     /* LAB 4 TODO 3 END */
+    init_filesystem();
 
     /**
      * (Final) TODO BEGIN 
@@ -88,7 +87,7 @@ NO_RETURN void kernel_entry()
     // p->kcontext->x1 = 0;  // 可以传递一些其他参数
     p->ucontext->elr = 0;
     p->ucontext->spsr = 0;
-    printk("p->kcontext: %p\n", p->kcontext);
+    // printk("p->kcontext: %p\n", p->kcontext);
     // printk("p->kcontext: %p\n", p->kcontext);
     // printk("p->ucontext: %p\n", p->ucontext);
     // p->kcontext = (KernelContext *)((u64)p->ucontext - sizeof(KernelContext));

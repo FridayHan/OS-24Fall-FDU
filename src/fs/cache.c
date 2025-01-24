@@ -132,7 +132,7 @@ static Block *cache_acquire(usize block_no) {
         while (block->acquired) {
             release_spinlock(&lock);
             wait_sem(&block->lock);
-            printk("cache.c: wait_sem %p\n", &block->lock);
+            // printk("cache.c: wait_sem %p\n", &block->lock);
             acquire_spinlock(&lock);
             if (get_sem(&block->lock)) {
                 break;
@@ -179,7 +179,7 @@ static void cache_release(Block *block) {
     acquire_spinlock(&lock);
     block->acquired = false;
     post_sem(&block->lock);
-    printk("cache.c_cache_release: post_sem %p\n", &block->lock);
+    // printk("cache.c_cache_release: post_sem %p\n", &block->lock);
     release_spinlock(&lock);
 }
 
@@ -265,7 +265,7 @@ static void cache_end_op(OpContext *ctx) {
     if (log.num_ops > 0) {
         _lock_sem(&(log.check_sem));
         post_sem(&log.op_num_sem);
-        printk("cache.c_cache_end_op: post_sem %p\n", &log.op_num_sem);
+        // printk("cache.c_cache_end_op: post_sem %p\n", &log.op_num_sem);
         release_spinlock(&log.log_lock);
         if (!_wait_sem(&(log.check_sem), false)) {
             PANIC();
@@ -297,7 +297,7 @@ static void cache_end_op(OpContext *ctx) {
         write_header();
         post_all_sem(&log.check_sem);
         post_all_sem(&log.op_num_sem);
-        printk("cache.c_cache_end_op: post_sem %p\n", &log.op_num_sem);
+        // printk("cache.c_cache_end_op: post_sem %p\n", &log.op_num_sem);
     }
     release_spinlock(&log.log_lock);
 }
