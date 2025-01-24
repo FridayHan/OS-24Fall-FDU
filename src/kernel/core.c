@@ -7,11 +7,11 @@
 #include <common/buf.h>
 #include <kernel/mem.h>
 
+u32 LBA;
 volatile bool panic_flag;
 extern void swtch(KernelContext *new_ctx, KernelContext **old_ctx);
 extern void trap_return();
-extern char icode[];
-extern char eicode[];
+extern char icode[], eicode[];
 
 NO_RETURN void idle_entry()
 {
@@ -37,7 +37,7 @@ NO_RETURN void kernel_entry()
     init_filesystem();
 
     printk("Hello world! (Core %lld)\n", cpuid());
-    proc_test();
+    // proc_test();
     // vm_test();
     // user_proc_test();
     // io_test();
@@ -50,7 +50,7 @@ NO_RETURN void kernel_entry()
     b.block_no = (u32)0x0;
     virtio_blk_rw(&b);
     u8 *data = b.data;
-    int LBA = *(int *)(data + 0x1CE + 0x8);
+    LBA = *(int *)(data + 0x1CE + 0x8);
     int num = *(int *)(data + 0x1CE + 0xC);
     printk("LBA:%d, num:%d\n", LBA, num);
     /* LAB 4 TODO 3 END */
@@ -88,11 +88,12 @@ NO_RETURN void kernel_entry()
     // p->kcontext->x1 = 0;  // 可以传递一些其他参数
     p->ucontext->elr = 0;
     p->ucontext->spsr = 0;
+    printk("p->kcontext: %p\n", p->kcontext);
     // printk("p->kcontext: %p\n", p->kcontext);
     // printk("p->ucontext: %p\n", p->ucontext);
     // p->kcontext = (KernelContext *)((u64)p->ucontext - sizeof(KernelContext));
-    // printk("p->kcontext: %p\n", p->kcontext);
-    // printk("p->ucontext: %p\n", p->ucontext);
+    printk("p->kcontext: %p\n", p->kcontext);
+    printk("p->ucontext: %p\n", p->ucontext);
     printk("Create process %d\n", p->pid);
 
     // 切换到新创建的进程

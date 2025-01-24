@@ -15,7 +15,6 @@
 
 void init_sections(ListNode *section_head) {
     /* (Final) TODO BEGIN */
-    // 初始化section链表
     init_list_node(section_head);
 
     // struct section *text_section = kalloc(sizeof(struct section));
@@ -30,7 +29,6 @@ void init_sections(ListNode *section_head) {
     // data_section->end = 0x30000000;
     // _insert_into_list(section_head, &data_section->stnode);
 
-    // // TODO: other sections
     /* (Final) TODO END */
 }
 

@@ -2,6 +2,8 @@
 #include <fs/inode.h>
 #include <kernel/mem.h>
 #include <kernel/printk.h>
+#include <kernel/sched.h>
+#include <kernel/console.h>
 
 /**
     @brief the private reference to the super block.
@@ -66,7 +68,10 @@ void init_inodes(const SuperBlock* _sblock, const BlockCache* _cache) {
     if (ROOT_INODE_NO < sblock->num_inodes)
         inodes.root = inodes.get(ROOT_INODE_NO);
     else
+    {
+        printk("ROOT_INODE_NO: %d, sblock->num_inodes: %d\n", ROOT_INODE_NO, sblock->num_inodes);
         printk("(warn) init_inodes: no root inode.\n");
+    }
 }
 
 // initialize in-memory inode.
@@ -163,8 +168,10 @@ static Inode* inode_get(usize inode_no) {
     increment_rc(&inode->rc);
     
     inode_lock(inode);
+    printk("inode_get: inode_lock\n");
     inode_sync(NULL, inode, false);
     inode_unlock(inode);
+    printk("inode_get: inode_unlock\n");
 
     inode->valid = true;
     _insert_into_list(&head, &inode->node);
@@ -219,10 +226,12 @@ static void inode_put(OpContext* ctx, Inode* inode) {
     acquire_spinlock(&lock);
     if (inode->rc.count == 1 && inode->entry.num_links == 0) {
         inode_lock(inode);
+        printk("inode_put: inode_lock\n");
         inode_clear(ctx, inode);
         inode->entry.type = INODE_INVALID;
         inode_sync(ctx, inode, true);
         inode_unlock(inode);
+        printk("inode_put: inode_unlock\n");
         _detach_from_list(&inode->node);
         kfree(inode);
     } else {
@@ -526,22 +535,31 @@ static Inode* namex(const char* path,
                     char* name,
                     OpContext* ctx) {
     /* (Final) TODO BEGIN */
-    Inode* ip = inodes.root;  // 从根目录开始查找
-    Inode* parent = NULL;
-    const char* next_path = path;
-    
-    // 如果路径是绝对路径，从根目录开始，跳过首个 '/'
-    if (*next_path == '/') {
-        next_path = skipelem(next_path, name);
+    Inode *ip, *next;
+
+    if (*path == '/')
+    {
+        ip = inodes.root;
+    }
+    else
+    {
+        ip = inodes.share(thisproc()->cwd);
     }
 
     // 遍历路径中的各个部分
-    while (next_path != NULL) {
+    while ((path = skipelem(path, name)) != NULL) {
+        inodes.lock(ip);
         // 查找下一个部分的目录或文件
         if (ip->entry.type != INODE_DIRECTORY) {
-            // 如果当前目录不是目录类型，无法继续
             printk("(error) namex: not a directory: %s\n", name);
+            inodes.unlock(ip);
+            inodes.put(ctx, ip);
             return NULL;
+        }
+
+        if (nameiparent && *path == '\0') {
+            inodes.unlock(ip);
+            return ip;
         }
 
         // 查找文件名对应的 inode
@@ -549,32 +567,33 @@ static Inode* namex(const char* path,
         if (inode_no == 0) {
             // 如果找不到该条目
             printk("(error) namex: inode not found: %s\n", name);
+            inodes.unlock(ip);
+            inodes.put(ctx, ip);
             return NULL;
         }
 
         // 获取子目录的 inode
-        parent = ip;
-        ip = inodes.get(inode_no);
+        next = inodes.get(inode_no);
+        inodes.unlock(ip);
+        ip = next;
 
-        // 如果不是父目录查找，并且下一个路径部分是文件路径
-        if (!nameiparent && next_path[0] == '\0') {
-            // 如果是查找文件本身，并且路径结束，则返回当前 inode
-            return ip;
-        }
+        // // 如果不是父目录查找，并且下一个路径部分是文件路径
+        // if (!nameiparent && path[0] == '\0') {
+        //     // 如果是查找文件本身，并且路径结束，则返回当前 inode
+        //     return ip;
+        // }
 
-        // 继续解析路径
-        next_path = skipelem(next_path, name);
+        // // 继续解析路径
+        // path = skipelem(path, name);
     }
 
     // 如果是查找父目录，返回父目录的 inode，并将最后的文件名填充到 name 中
     if (nameiparent) {
-        if (parent != NULL) {
-            memmove(name, next_path, strlen(next_path));
-            return parent;
-        }
+        inodes.put(ctx, ip);
+        return NULL;
     }
 
-    return NULL;
+    return ip;
     /* (Final) TODO END */
 }
 

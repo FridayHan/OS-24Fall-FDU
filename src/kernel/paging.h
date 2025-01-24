@@ -10,6 +10,7 @@
 #define ST_TEXT (ST_FILE | ST_RO)
 #define ST_DATA ST_FILE
 #define ST_BSS ST_FILE
+#define ST_USTACK (1 << 4)
 
 struct section {
     u64 flags;

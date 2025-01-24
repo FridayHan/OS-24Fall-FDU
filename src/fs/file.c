@@ -75,7 +75,9 @@ void file_close(struct file* f) {
 int file_stat(struct file* f, struct stat* st) {
     /* (Final) TODO BEGIN */
     if (f->type == FD_INODE) {
+        inodes.lock(f->ip);
         stati(f->ip, st);  // 修改为直接调用 stati 函数
+        inodes.unlock(f->ip);
         return 0;
     }
     /* (Final) TODO END */
@@ -83,19 +85,34 @@ int file_stat(struct file* f, struct stat* st) {
 }
 
 /* Read from file f. */
-isize file_read(struct file* f, char* addr, isize n) {
+isize file_read(struct file* f, char* addr, isize n)
+{
     /* (Final) TODO BEGIN */
-    if (f->type == FD_INODE) {
-        isize result = inodes.read(f->ip, (u8*)addr, f->off, n);  // 修改参数类型为 u8*
-        if (result > 0) {
-            f->off += result;  // 更新偏移量
+    printk("file_read: READING type=%d, off=%lld, n=%lld\n", f->type, f->off, n);
+    if (f->readable == false)
+    {
+        printk("file_read: file is not readable\n");
+        return -1;
+    }
+
+    if (f->type == FD_INODE)
+    {
+        inodes.lock(f->ip);
+        isize result = inodes.read(f->ip, (u8*)addr, f->off, n);
+        if (result > 0)
+        {
+            f->off += result;
         }
+        inodes.unlock(f->ip);
         return result;
-    } else if (f->type == FD_PIPE) {
-        isize result = pipe_read(f->pipe, (u64)addr, n);  // 将 char* 转换为 u64
-        if (result > 0) {
-            f->off += result;  // 更新偏移量
-        }
+    }
+    else if (f->type == FD_PIPE)
+    {
+        isize result = pipe_read(f->pipe, (u64)addr, n);
+        // if (result > 0)
+        // {
+        //     f->off += result;
+        // }
         return result;
     }
     printk("file_read: unknown file type\n");
@@ -104,19 +121,49 @@ isize file_read(struct file* f, char* addr, isize n) {
 }
 
 /* Write to file f. */
-isize file_write(struct file* f, char* addr, isize n) {
+isize file_write(struct file* f, char* addr, isize n)
+{
     /* (Final) TODO BEGIN */
-    if (f->type == FD_INODE) {
-        isize result = inodes.write(NULL, f->ip, (u8*)addr, f->off, n);  // 添加 OpContext* 参数，修改参数类型为 u8*
-        if (result > 0) {
-            f->off += result;  // 更新偏移量
+    isize total_written = 0;
+    if (f->type == FD_INODE)
+    {
+        usize max_write_size = MIN(INODE_MAX_BYTES - f->off, (usize)n);
+        usize bytes_written = 0;
+
+        while (bytes_written < max_write_size) {
+            usize write_chunk_size = MIN(
+                max_write_size - bytes_written,
+                (usize)((OP_MAX_NUM_BLOCKS - 2) * BLOCK_SIZE)  // 为了避免超出操作块的最大大小，稍微减少一些
+            );
+
+            OpContext op_context;
+            bcache.begin_op(&op_context);
+
+            inodes.lock(f->ip);
+
+            if (inodes.write(&op_context, f->ip, (u8 *)(addr + bytes_written), f->off, write_chunk_size) != write_chunk_size) {
+                inodes.unlock(f->ip);
+                bcache.end_op(&op_context);
+                return -1;
+            }
+
+            inodes.unlock(f->ip);
+            bcache.end_op(&op_context);
+
+            f->off += write_chunk_size;
+            bytes_written += write_chunk_size;
+            total_written += write_chunk_size;
         }
-        return result;
-    } else if (f->type == FD_PIPE) {
-        isize result = pipe_write(f->pipe, (u64)addr, n);  // 将 char* 转换为 u64
-        if (result > 0) {
-            f->off += result;  // 更新偏移量
-        }
+
+        return total_written;
+    }
+    else if (f->type == FD_PIPE)
+    {
+        isize result = pipe_write(f->pipe, (u64)addr, n);
+        // if (result > 0)
+        // {
+        //     f->off += result;
+        // }
         return result;
     }
     printk("file_write: unknown file type\n");

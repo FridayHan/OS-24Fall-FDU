@@ -61,6 +61,7 @@ int post_all_sem(Semaphore *sem)
 
 bool _wait_sem(Semaphore *sem, bool alertable)
 {
+    printk("wait_sem\n");
     if (--sem->val >= 0) {
         release_spinlock(&sem->lock);
         return true;
@@ -86,6 +87,7 @@ bool _wait_sem(Semaphore *sem, bool alertable)
 
 void _post_sem(Semaphore *sem)
 {
+    printk("post_sem\n");
     if (++sem->val <= 0) {
         ASSERT(!_empty_list(&sem->sleeplist));
         auto wait = container_of(sem->sleeplist.prev, WaitData, slnode);
