@@ -15,6 +15,7 @@ struct console {
 };
 
 void console_init();
+void uart_putchar(int c);
 void console_intr(char c);
 isize console_write(Inode *ip, char *buf, isize n);
 isize console_read(Inode *ip, char *dst, isize n);

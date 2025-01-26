@@ -26,7 +26,8 @@ static void sd_read(usize block_no, u8 *buffer)
     @param[in] block_no the block number to write
     @param[in] buffer the buffer to store the data
  */
-static void sd_write(usize block_no, u8 *buffer) {
+static void sd_write(usize block_no, u8 *buffer)
+{
     Buf b;
     b.block_no = (u32)block_no;
     b.flags = B_DIRTY | B_VALID;
@@ -61,7 +62,8 @@ void print_super_block()
     printk("---------------------\n");
 }
 
-void init_block_device() {
+void init_block_device()
+{
     sd_read(1, sblock_data);
     print_super_block();
     block_device.read = sd_read;

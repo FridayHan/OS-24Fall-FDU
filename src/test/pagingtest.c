@@ -28,8 +28,7 @@ void pgfault_first_test() {
     attach_pgdir(pd);
     struct section *st = NULL;
     _for_in_list(node, &pd->section_head) {
-        if (node == &pd->section_head)
-            continue;
+        if (node == &pd->section_head) continue;
         st = container_of(node, struct section, stnode);
         if (st->flags & ST_HEAP)
             break;
@@ -86,8 +85,7 @@ void pgfault_second_test() {
     attach_pgdir(pd);
     struct section *st = NULL;
     _for_in_list(node, &pd->section_head) {
-        if (node == &pd->section_head)
-            continue;
+        if (node == &pd->section_head) continue;
         st = container_of(node, struct section, stnode);
         if (st->flags & ST_HEAP)
             break;

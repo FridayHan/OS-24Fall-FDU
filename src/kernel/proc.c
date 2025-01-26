@@ -55,15 +55,15 @@ void init_proc(Proc *p)
     init_pgdir(&p->pgdir);
 
     p->kstack = kalloc(KSTACK_SIZE);
-    if (!p->kstack) {
-        PANIC();
-    }
+    if (!p->kstack) PANIC();
     memset(p->kstack, 0, KSTACK_SIZE);
 
     p->kcontext = (KernelContext *)(p->kstack + KSTACK_SIZE - sizeof(KernelContext) - sizeof(UserContext));
     p->ucontext = (UserContext *)(p->kstack + KSTACK_SIZE - sizeof(UserContext));
     ASSERT(sizeof(KernelContext) + sizeof(UserContext) <= KSTACK_SIZE);
 
+    if (inodes.root) p->cwd = inodes.share(inodes.root);
+    init_oftable(&p->oftable);
     release_spinlock(&proc_lock);
 }
 
@@ -96,7 +96,8 @@ int start_proc(Proc *p, void (*entry)(u64), u64 arg)
     // 3. activate the proc and return its pid
     // NOTE: be careful of concurrency
     
-    if (p->parent == NULL) {
+    if (p->parent == NULL)
+    {
         acquire_spinlock(&proc_lock);
         p->parent = &root_proc;
         _insert_into_list(&root_proc.children, &p->ptnode);
@@ -121,9 +122,7 @@ int wait(int *exitcode)
     // NOTE: be careful of concurrency
 
     Proc *this = thisproc();
-    if (_empty_list(&this->children)) {
-        return -1;
-    }
+    if (_empty_list(&this->children)) return -1;
 
     wait_sem(&this->childexit);
     // printk("proc.c: wait_sem %p\n", &this->childexit);
@@ -131,14 +130,15 @@ int wait(int *exitcode)
 
     _for_in_list(node, &this->children)
     {
-        if (node == &this->children)
-            continue;
+        if (node == &this->children) continue;
         Proc *cp = container_of(node, Proc, ptnode);
-        if (is_zombie(cp)) {
+        if (is_zombie(cp))
+        {
             int pid = cp->pid;
             _detach_from_list(node);
 
-            if (exitcode) {
+            if (exitcode)
+            {
                 *exitcode = cp->exitcode;
             }
             kfree(cp->kstack);
@@ -164,14 +164,16 @@ NO_RETURN void exit(int code)
     acquire_spinlock(&proc_lock);
     this->exitcode = code;
 
-    while(!_empty_list(&this->children)) {
+    while(!_empty_list(&this->children))
+    {
         ListNode *node = this->children.next;
         Proc *cp = container_of(node, Proc, ptnode);
         _detach_from_list(node);
         cp->parent = &root_proc;
         ASSERT(cp->pid != 0);
         _insert_into_list(root_proc.children.prev, node);
-        if (is_zombie(cp)) {
+        if (is_zombie(cp))
+        {
             post_sem(&root_proc.childexit);
             // printk("proc.c: post_sem %p\n", &root_proc.childexit);
         }
@@ -188,6 +190,17 @@ NO_RETURN void exit(int code)
     acquire_sched_lock();
     release_spinlock(&proc_lock);
 
+    free_pgdir(&this->pgdir);
+    // Final
+    decrement_rc(&this->cwd->rc);
+    for (int i = 0; i < NOFILE; i++)
+    {
+        if (this->oftable.ofiles[i]) {
+            file_close(this->oftable.ofiles[i]);
+            this->oftable.ofiles[i] = 0;
+        }
+    }
+
     sched(ZOMBIE);
 
     PANIC(); // prevent the warning of 'no_return function returns'
@@ -195,16 +208,19 @@ NO_RETURN void exit(int code)
 
 Proc *dfs(Proc *p, int pid)
 {
-    if (p->pid == pid) {
+    if (p->pid == pid)
+    {
         return p;
-    } else if (!_empty_list(&p->children)) {
-        _for_in_list(node, &p->children) {
-            if (node == &p->children) {
-                continue;
-            }
+    }
+    else if (!_empty_list(&p->children))
+    {
+        _for_in_list(node, &p->children)
+        {
+            if (node == &p->children) continue;
             Proc *cp = container_of(node, Proc, ptnode);
             Proc *ret = dfs(cp, pid);
-            if (ret) {
+            if (ret)
+            {
                 return ret;
             }
         }
@@ -220,7 +236,8 @@ int kill(int pid)
 // dfs kill
     acquire_spinlock(&proc_lock);
     Proc *p = dfs(&root_proc, pid);
-    if (p && !is_unused(p)) {
+    if (p && !is_unused(p))
+    {
         p->killed = true;
         activate_proc(p);
         release_spinlock(&proc_lock);
@@ -236,19 +253,23 @@ int kill(int pid)
     // init_list_node(&queue);
     // _insert_into_list(&queue, &root_proc.schinfo.kill_node);
 
-    // while (!_empty_list(&queue)) {
+    // while (!_empty_list(&queue))
+    // {
     //     ListNode *node = queue.next;
     //     Proc *p = container_of(node, Proc, schinfo.kill_node);
-    //     if (p->pid == pid && p->state != UNUSED) {
+    //     if (p->pid == pid && p->state != UNUSED)
+    //     {
     //         p->killed = true;
     //         release_spinlock(&proc_lock);
     //         activate_proc(p);
     //         return 0;
     //     }
 
-    //     _for_in_list(node2, &p->children) {
+    //     _for_in_list(node2, &p->children)
+    //     {
     //         Proc *p0 = container_of(node2, Proc, ptnode);
-    //         if (p0->pid == p->pid || p0->pid < 0) {
+    //         if (p0->pid == p->pid || p0->pid < 0)
+    //         {
     //             continue;
     //         }
     //         ListNode *kill_node = &p0->schinfo.kill_node;
@@ -265,6 +286,92 @@ int kill(int pid)
  * Sets up stack to return as if from system call.
  */
 void trap_return();
+
+
+Proc* create_child_proc(Proc *parent_proc)
+{
+    Proc *child_proc = create_proc();
+    acquire_spinlock(&proc_lock);
+    child_proc->parent = parent_proc;
+    _insert_into_list(&parent_proc->children, &child_proc->ptnode);
+    release_spinlock(&proc_lock);
+    return child_proc;
+}
+
+
+// 负责复制父进程的页目录
+void copy_page_directory(Proc *parent_proc, Proc *child_proc)
+{
+    acquire_spinlock(&parent_proc->pgdir.lock);
+    ListNode *sections_head = &parent_proc->pgdir.section_head;
+
+    _for_in_list(section_node, sections_head)
+    {
+        if (section_node == sections_head) continue;
+        
+        struct section *sec = container_of(section_node, struct section, stnode);
+        struct section *new_sec = (struct section *)kalloc(sizeof(struct section));
+        init_section(new_sec);
+        new_sec->begin = sec->begin;
+        new_sec->end = sec->end;
+        new_sec->flags = sec->flags;
+
+        if (sec->fp)
+        {
+            new_sec->fp = file_dup(sec->fp);
+            new_sec->offset = sec->offset;
+            new_sec->length = sec->length;
+        }
+
+        _insert_into_list(&child_proc->pgdir.section_head, &new_sec->stnode);
+
+        // 处理每一页的映射
+        for (auto va = PAGE_BASE(sec->begin); va < sec->end; va += PAGE_SIZE)
+        {
+            auto pte = get_pte(&parent_proc->pgdir, va, false);
+            if (pte && (*pte & PTE_VALID))
+            {
+                *pte |= PTE_RO; // 冻结共享页面
+                vmmap(&child_proc->pgdir, va, (void *)P2K(PTE_ADDRESS(*pte)), PTE_FLAGS(*pte));
+                kshare_page(P2K(PTE_ADDRESS(*pte)));
+            }
+        }
+    }
+    release_spinlock(&parent_proc->pgdir.lock);
+}
+
+// 负责复制父进程的文件描述符表
+void copy_file_table(Proc *parent_proc, Proc *child_proc)
+{
+    memset((void *)&child_proc->oftable, 0, sizeof(struct oftable));
+
+    for (int i = 0; i < NOFILE; i++)
+    {
+        if (parent_proc->oftable.ofiles[i])
+        {
+            child_proc->oftable.ofiles[i] = file_dup(parent_proc->oftable.ofiles[i]);
+        }
+        else
+        {
+            break;
+        }
+    }
+}
+
+// 负责复制父进程的工作目录
+void copy_working_directory(Proc *parent_proc, Proc *child_proc)
+{
+    if (child_proc->cwd != parent_proc->cwd)
+    {
+        OpContext ctx;
+        bcache.begin_op(&ctx);
+        inodes.put(&ctx, child_proc->cwd);
+        bcache.end_op(&ctx);
+        child_proc->cwd = inodes.share(parent_proc->cwd);
+    }
+}
+
+
 int fork()
 {
     /**
@@ -277,45 +384,72 @@ int fork()
      * 5. Set the state of the new proc to RUNNABLE.
      * 6. Activate the new proc and return its pid.
      */
-    // 1. 创建新的子进程
-    Proc *p = thisproc();
-    Proc *child = create_proc();
-    if (!child) {
-        return -1;
-    }
+    printk("fork\n");
+    // // 1. 创建新的子进程
+    // Proc *p = thisproc();
+    // Proc *child = create_proc();
+    // if (!child)
+    // {
+    //     return -1;
+    // }
 
-    // 2. 复制父进程的内存空间
-    copy_sections(&p->pgdir.section_head, &child->pgdir.section_head);
-    for (int fd = 0; fd < NOFILE; fd++)
-    {
-        if (p->oftable.ofiles[fd])
-        {
-            child->oftable.ofiles[fd] = file_dup(p->oftable.ofiles[fd]);
-        }
-    }
-    child->cwd = p->cwd;
+    // // 2. 复制父进程的内存空间
+    // copy_sections(&p->pgdir.section_head, &child->pgdir.section_head);
+    // for (int fd = 0; fd < NOFILE; fd++)
+    // {
+    //     if (p->oftable.ofiles[fd])
+    //     {
+    //         child->oftable.ofiles[fd] = file_dup(p->oftable.ofiles[fd]);
+    //     }
+    // }
+    // child->cwd = p->cwd;
 
-    // 3. 复制父进程的 trapframe
-    *child->ucontext = *p->ucontext;
-    child->ucontext->x[0] = 0; // 子进程返回值为 0
-    child->ucontext->elr = (u64)trap_return;
-    child->ucontext->sp = (u64)get_zero_page();
+    // // 3. 复制父进程的 trapframe
+    // *child->ucontext = *p->ucontext;
+    // child->ucontext->x[0] = 0; // 子进程返回值为 0
+    // child->ucontext->elr = (u64)trap_return;
+    // child->ucontext->sp = (u64)get_zero_page();
 
-    // 4. 设置父进程为当前进程
-    set_parent_to_this(child);
+    // // 4. 设置父进程为当前进程
+    // set_parent_to_this(child);
 
-    // 5. 设置子进程状态为 RUNNABLE
-    child->state = RUNNABLE;
+    // // 5. 设置子进程状态为 RUNNABLE
+    // child->state = RUNNABLE;
 
-    // 6. 激活子进程并返回其 pid
-    activate_proc(child);
-    return child->pid;
+    // // 6. 激活子进程并返回其 pid
+    // activate_proc(child);
+    // return child->pid;
+    Proc *parent_proc = thisproc();
+    
+    // 1. 创建子进程
+    Proc *child_proc = create_child_proc(parent_proc);
+
+    // 2. 复制父进程的用户上下文
+    memcpy((void *)child_proc->ucontext, (void *)parent_proc->ucontext, sizeof(UserContext));
+    child_proc->ucontext->x[0] = 0;
+
+    // 3. 复制父进程的页目录
+    copy_page_directory(parent_proc, child_proc);
+
+    // 4. 复制文件描述符表
+    copy_file_table(parent_proc, child_proc);
+
+    // 5. 复制工作目录
+    copy_working_directory(parent_proc, child_proc);
+
+    // 6. 启动子进程
+    start_proc(child_proc, trap_return, 0);
+
+    // 7. 返回子进程的 PID
+    return child_proc->pid;
 }
 
-void init_pid_pool(int initial_pid_count) {
+void init_pid_pool(int initial_pid_count)
+{
     init_list_node(&free_pid_list);
     init_spinlock(&pid_lock);
-    for (int i = initial_pid_count - 1; i >= 0; i--) {
+    for (int i = initial_pid_count - 1; i >= 0; i--)
+    {
         PIDNode *pid_node = kalloc(sizeof(PIDNode));
         memset(pid_node, 0, sizeof(PIDNode));
         pid_node->pid = i;
@@ -323,9 +457,11 @@ void init_pid_pool(int initial_pid_count) {
     }
 }
 
-int allocate_pid() {
+int allocate_pid()
+{
     acquire_spinlock(&pid_lock);
-    if (!_empty_list(&free_pid_list)) {
+    if (!_empty_list(&free_pid_list))
+    {
         ListNode *node = free_pid_list.next;
         _detach_from_list(free_pid_list.next);
         PIDNode *pid_node = container_of(node, PIDNode, node);
@@ -339,7 +475,8 @@ int allocate_pid() {
     return pid;
 }
 
-void deallocate_pid(int pid) {
+void deallocate_pid(int pid)
+{
     acquire_spinlock(&pid_lock);
     PIDNode *pid_node = kalloc(sizeof(PIDNode));
     memset(pid_node, 0, sizeof(PIDNode));

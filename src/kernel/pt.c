@@ -3,6 +3,8 @@
 #include <kernel/mem.h>
 #include <kernel/pt.h>
 #include <common/defines.h>
+#include <kernel/printk.h>
+#include <kernel/paging.h>
 
 PTEntriesPtr get_pte(struct pgdir *pgdir, u64 va, bool alloc)
 {
@@ -11,65 +13,64 @@ PTEntriesPtr get_pte(struct pgdir *pgdir, u64 va, bool alloc)
     // If the entry not exists (NEEDN'T BE VALID), allocate it if alloc=true, or return NULL if false.
     // THIS ROUTINE GETS THE PTE, NOT THE PAGE DESCRIBED BY PTE.
 
-    // 分配根页表
-    if (!pgdir->pt) {
-        if (!alloc) return NULL;
-        pgdir->pt = (PTEntriesPtr)kalloc_page();
-        if (!pgdir->pt) return NULL;
-        memset(pgdir->pt, 0, PAGE_SIZE);
-    }
-
     PTEntriesPtr table = pgdir->pt;
-    u64 idx;
-
-    // 第1级页表（PGD），获取索引并查找
-    idx = VA_PART0(va);
-    if (!(table[idx] & PTE_VALID)) {
+    if (!table)
+    {
         if (!alloc) return NULL;
-        // 分配第2级页表
+        table = (PTEntriesPtr)kalloc_page();
+        if (!table) return NULL;
+        memset(table, 0, PAGE_SIZE);
+        pgdir->pt = table;
+    }
+
+    u64 idx = VA_PART0(va);
+    if (!(table[idx] & PTE_VALID))
+    {
+        if (!alloc) return NULL;
         table[idx] = (u64)K2P(kalloc_page()) | PTE_TABLE | PTE_VALID;
-        if (!(table[idx] & PTE_VALID)) return NULL;  // 分配失败
+        if (!(table[idx] & PTE_VALID)) return NULL;
         void* table_address = (void*)P2K(PTE_ADDRESS(table[idx]));
-        memset(table_address, 0, PAGE_SIZE);  // 初始化为0
+        memset(table_address, 0, PAGE_SIZE);
     }
     table = (PTEntriesPtr)P2K(PTE_ADDRESS(table[idx]));
 
-    // 第2级页表
     idx = VA_PART1(va);
-    if (!(table[idx] & PTE_VALID)) {
+    if (!(table[idx] & PTE_VALID))
+    {
         if (!alloc) return NULL;
         table[idx] = (u64)K2P(kalloc_page()) | PTE_TABLE | PTE_VALID;
-        if (!(table[idx] & PTE_VALID)) return NULL;  // 分配失败
+        if (!(table[idx] & PTE_VALID)) return NULL;
         memset((void*)P2K(PTE_ADDRESS(table[idx])), 0, PAGE_SIZE);
     }
     table = (PTEntriesPtr)P2K(PTE_ADDRESS(table[idx]));
 
-    // 第3级页表
     idx = VA_PART2(va);
-    if (!(table[idx] & PTE_VALID)) {
+    if (!(table[idx] & PTE_VALID))
+    {
         if (!alloc) return NULL;
         table[idx] = (u64)K2P(kalloc_page()) | PTE_TABLE | PTE_VALID;
-        if (!(table[idx] & PTE_VALID)) return NULL;  // 分配失败
+        if (!(table[idx] & PTE_VALID)) return NULL;
         memset((void*)P2K(PTE_ADDRESS(table[idx])), 0, PAGE_SIZE);
     }
     table = (PTEntriesPtr)P2K(PTE_ADDRESS(table[idx]));
 
-    // 第4级页表
     idx = VA_PART3(va);
-    if (!(table[idx] & PTE_VALID)) {
+    if (!(table[idx] & PTE_VALID))
+    {
         if (!alloc) return NULL;
-    //     u64 phys_page = (u64)kalloc_page();  // 分配物理页面
-    //     if (!phys_page) return NULL;  // 分配失败
-    //     table[idx] = phys_page | PTE_PAGE | PTE_VALID | PTE_RW;  // 设置页表项为有效并映射物理页面
+        // u64 phys_page = (u64)kalloc_page();
+        // if (!phys_page) return NULL;
+        // table[idx] = phys_page | PTE_PAGE | PTE_VALID | PTE_RW;
     }
 
-    // 返回指向该页表项的指针
     return &table[idx];
 }
 
 void init_pgdir(struct pgdir *pgdir)
 {
     pgdir->pt = NULL;
+    init_spinlock(&pgdir->lock);
+    init_sections(&pgdir->section_head);
 }
 
 void free_pgdir(struct pgdir *pgdir)
@@ -78,26 +79,30 @@ void free_pgdir(struct pgdir *pgdir)
     // Free pages used by the page table. If pgdir->pt=NULL, do nothing.
     // DONT FREE PAGES DESCRIBED BY THE PAGE TABLE
 
-    if (!pgdir->pt) return;  // 如果根页表不存在，直接返回
+    if (!pgdir->pt) return;
 
-    // 遍历并释放各级页表
-    for (int i = 0; i < N_PTE_PER_TABLE; i++) {
-        if (pgdir->pt[i] & PTE_VALID) {
+    for (int i = 0; i < N_PTE_PER_TABLE; i++)
+    {
+        if (pgdir->pt[i] & PTE_VALID)
+        {
             PTEntriesPtr table1 = (PTEntriesPtr)P2K(PTE_ADDRESS(pgdir->pt[i]));
-
             // 第1级页表
-            for (int j = 0; j < N_PTE_PER_TABLE; j++) {
-                if (table1[j] & PTE_VALID) {
+            for (int j = 0; j < N_PTE_PER_TABLE; j++)
+            {
+                if (table1[j] & PTE_VALID)
+                {
                     PTEntriesPtr table2 = (PTEntriesPtr)P2K(PTE_ADDRESS(table1[j]));
-
                     // 第2级页表
-                    for (int k = 0; k < N_PTE_PER_TABLE; k++) {
-                        if (table2[k] & PTE_VALID) {
+                    for (int k = 0; k < N_PTE_PER_TABLE; k++)
+                    {
+                        if (table2[k] & PTE_VALID)
+                        {
                             PTEntriesPtr table3 = (PTEntriesPtr)P2K(PTE_ADDRESS(table2[k]));
-
                             // 第3级页表
-                            for (int l = 0; l < N_PTE_PER_TABLE; l++) {
-                                if (table3[l] & PTE_VALID) {
+                            for (int l = 0; l < N_PTE_PER_TABLE; l++)
+                            {
+                                if (table3[l] & PTE_VALID)
+                                {
                                     // 第3级页表项有效，不释放物理页，只释放页表本身
                                     table3[l] = 0;
                                 }
@@ -118,6 +123,8 @@ void free_pgdir(struct pgdir *pgdir)
     // 释放根页表
     kfree_page(pgdir->pt);
     pgdir->pt = NULL;
+
+    free_sections(pgdir);
 }
 
 void attach_pgdir(struct pgdir *pgdir)
@@ -137,12 +144,15 @@ void attach_pgdir(struct pgdir *pgdir)
 void vmmap(struct pgdir *pd, u64 va, void *ka, u64 flags)
 {
     /* (Final) TODO BEGIN */
+    u64 pa = (u64)K2P(ka);
     PTEntriesPtr pte = get_pte(pd, va, true);
-    if (!pte) {
+    if (!pte)
+    {
         printk("vmmap: get_pte failed\n");
         return;
     }
-    *pte = (u64)K2P(ka) | flags;
+    *pte = PAGE_BASE(pa) | flags;
+    arch_tlbi_vmalle1is();
     /* (Final) TODO END */
 }
 
@@ -154,22 +164,27 @@ void vmmap(struct pgdir *pd, u64 va, void *ka, u64 flags)
 int copyout(struct pgdir *pd, void *va, void *p, usize len)
 {
     /* (Final) TODO BEGIN */
-    u64 start = (u64)va;
-    u64 end = start + len;
-    u64 va0, pa0;
-    usize n;
-
-    while (start < end) {
-        va0 = (start & ~(PAGE_SIZE - 1));
-        pa0 = P2K(PTE_ADDRESS(*get_pte(pd, va0, true)));
-        if (!pa0) {
-            return -1;
+    usize total_copied = 0;
+    while (total_copied < len)
+    {
+        PTEntriesPtr pte = get_pte(pd, (u64)va, true);
+        if (*pte == NULL)
+        {
+            void *new_page = kalloc_page();
+            *pte = K2P(new_page) | PTE_USER_DATA;
         }
-        n = MIN(PAGE_SIZE - (start - va0), end - start);
-        memmove((void *)(pa0 + (start - va0)), p, n);
-        start += n;
-        p += n;
+
+        usize copy_size = MIN(len - total_copied, PAGE_SIZE - VA_OFFSET(va));
+        void *dst = (void *)(P2K(PTE_ADDRESS(*pte)) + VA_OFFSET(va));
+        memcpy(dst, p, copy_size);
+
+        total_copied += copy_size;
+        p += copy_size;
+        va += copy_size;
     }
-    return 0;
+    if (total_copied == len)
+        return 0;
+    else
+        return -1;
     /* (Final) TODO END */
 }

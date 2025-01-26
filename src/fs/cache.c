@@ -77,22 +77,26 @@ static INLINE void device_read(Block *block)
 }
 
 // write the content back to disk.
-static INLINE void device_write(Block *block) {
+static INLINE void device_write(Block *block)
+{
     device->write(block->block_no, block->data);
 }
 
 // read log header from disk.
-static INLINE void read_header() {
+static INLINE void read_header()
+{
     device->read(sblock->log_start, (u8 *)&header);
 }
 
 // write log header back to disk.
-static INLINE void write_header() {
+static INLINE void write_header()
+{
     device->write(sblock->log_start, (u8 *)&header);
 }
 
 // initialize a block struct.
-static void init_block(Block *block) {
+static void init_block(Block *block)
+{
     block->block_no = 0;
     init_list_node(&block->node);
     block->acquired = false;
@@ -104,13 +108,15 @@ static void init_block(Block *block) {
 }
 
 // see `cache.h`.
-static usize get_num_cached_blocks() {
+static usize get_num_cached_blocks()
+{
     // TODO
     return cache_size;
 }
 
 // see `cache.h`.
-static Block *cache_acquire(usize block_no) {
+static Block *cache_acquire(usize block_no)
+{
     // TODO
     acquire_spinlock(&lock);
     Block *block;
@@ -118,27 +124,27 @@ static Block *cache_acquire(usize block_no) {
 
     _for_in_list(p, &head)
     {
-        if (p == &head) {
-            continue;
-        }
+        if (p == &head) continue;
         block = container_of(p, Block, node);
-        if (block->block_no == block_no) {
+        if (block->block_no == block_no)
+        {
             in_cache = true;
             break;
         }
     }
 
-    if (in_cache) {
-        while (block->acquired) {
+    if (in_cache)
+    {
+        while (block->acquired)
+        {
             release_spinlock(&lock);
             wait_sem(&block->lock);
             // printk("cache.c: wait_sem %p\n", &block->lock);
             acquire_spinlock(&lock);
-            if (get_sem(&block->lock)) {
-                break;
-            }
+            if (get_sem(&block->lock)) break;
         }
-        if (!block->acquired) {
+        if (!block->acquired)
+        {
             get_sem(&block->lock);
         }
         block->acquired = true;
@@ -147,8 +153,8 @@ static Block *cache_acquire(usize block_no) {
         return block;
     }
 
-    if (get_num_cached_blocks() >= EVICTION_THRESHOLD) {
-        // 缓存达到限额，需要释放一些块
+    if (get_num_cached_blocks() >= EVICTION_THRESHOLD)
+    {
         evict_block();
     }
 
@@ -161,21 +167,19 @@ static Block *cache_acquire(usize block_no) {
 
     _insert_into_list(&head, &block->node);
     cache_size++;
-
+    release_spinlock(&lock);
     device_read(block);
     block->valid = true;
-    release_spinlock(&lock);
     return block;
 }
 
 // see `cache.h`.
-static void cache_release(Block *block) {
+static void cache_release(Block *block)
+{
     // TODO
-    // 确保传入的块不为空
-    if (!block) { PANIC(); }
+    if (!block) PANIC();
     ASSERT(block->acquired);
 
-    // 加锁，更新块状态
     acquire_spinlock(&lock);
     block->acquired = false;
     post_sem(&block->lock);
@@ -184,7 +188,8 @@ static void cache_release(Block *block) {
 }
 
 // see `cache.h`.
-void init_bcache(const SuperBlock *_sblock, const BlockDevice *_device) {
+void init_bcache(const SuperBlock *_sblock, const BlockDevice *_device)
+{
     sblock = _sblock;
     device = _device;
 
@@ -202,7 +207,8 @@ void init_bcache(const SuperBlock *_sblock, const BlockDevice *_device) {
     Block tmp;
     init_block(&tmp);
 
-    for (usize i = 0; i < header.num_blocks; i++) {
+    for (usize i = 0; i < header.num_blocks; i++)
+    {
         tmp.block_no = sblock->log_start + 1 + i;
         device_read(&tmp);
         tmp.block_no = header.block_no[i];
@@ -219,12 +225,11 @@ static void cache_begin_op(OpContext *ctx)
     // TODO
     acquire_spinlock(&log.log_lock);
 
-    if (log.num_ops >= MAX_NUM_OP) {
+    if (log.num_ops >= MAX_NUM_OP)
+    {
         _lock_sem(&(log.op_num_sem));
         release_spinlock(&log.log_lock);
-        if (!_wait_sem(&(log.op_num_sem), false)) {
-            PANIC();
-        };
+        if (!_wait_sem(&(log.op_num_sem), false)) PANIC();
         acquire_spinlock(&log.log_lock);
     }
     log.num_ops++;
@@ -233,13 +238,20 @@ static void cache_begin_op(OpContext *ctx)
 }
 
 // see `cache.h`.
-static void cache_sync(OpContext *ctx, Block *block) {
+static void cache_sync(OpContext *ctx, Block *block)
+{
     // TODO
-    if (!ctx) { device_write(block); return; }
+    if (!ctx)
+    {
+        device_write(block);
+        return;
+    }
 
     acquire_spinlock(&log.log_lock);
-    for (usize i = 0; i < header.num_blocks; i++) {
-        if (header.block_no[i] == block->block_no) {
+    for (usize i = 0; i < header.num_blocks; i++)
+    {
+        if (header.block_no[i] == block->block_no)
+        {
             release_spinlock(&log.log_lock);
             return;
         }
@@ -255,26 +267,28 @@ static void cache_sync(OpContext *ctx, Block *block) {
 }
 
 // see `cache.h`.
-static void cache_end_op(OpContext *ctx) {
+static void cache_end_op(OpContext *ctx)
+{
     // TODO
     acquire_spinlock(&log.log_lock);
     log.num_ops--;
     log.blocks_occupied -= OP_MAX_NUM_BLOCKS;
     ctx->rm = 0;
 
-    if (log.num_ops > 0) {
+    if (log.num_ops > 0)
+    {
         _lock_sem(&(log.check_sem));
         post_sem(&log.op_num_sem);
         // printk("cache.c_cache_end_op: post_sem %p\n", &log.op_num_sem);
         release_spinlock(&log.log_lock);
-        if (!_wait_sem(&(log.check_sem), false)) {
-            PANIC();
-        };
+        if (!_wait_sem(&(log.check_sem), false)) PANIC();
         return;
     }
 
-    if (log.num_ops == 0) {
-        for (usize i = 0; i < header.num_blocks; i++) {
+    if (log.num_ops == 0)
+    {
+        for (usize i = 0; i < header.num_blocks; i++)
+        {
             Block *block = cache_acquire(header.block_no[i]);
             device->write(sblock->log_start + i + 1, block->data);
             block->pinned = false;
@@ -286,7 +300,8 @@ static void cache_end_op(OpContext *ctx) {
         Block tmp;
         init_block(&tmp);
 
-        for (usize i = 0; i < header.num_blocks; i++) {
+        for (usize i = 0; i < header.num_blocks; i++)
+        {
             tmp.block_no = sblock->log_start + 1 + i;
             device_read(&tmp);
             tmp.block_no = header.block_no[i];
@@ -306,20 +321,23 @@ static void cache_end_op(OpContext *ctx) {
 usize cache_alloc(OpContext *ctx)
 {
     // TODO
-    if (ctx->rm <= 0)
-        PANIC();
+    if (ctx->rm <= 0) PANIC();
 
     usize num_bitmap_blocks = (sblock->num_data_blocks + BIT_PER_BLOCK - 1) / BIT_PER_BLOCK;
 
-    for (usize i = 0; i < num_bitmap_blocks; i++) {
+    for (usize i = 0; i < num_bitmap_blocks; i++)
+    {
         Block *bitmap_block = cache_acquire(sblock->bitmap_start + i);
-        for (usize j = 0; j < BLOCK_SIZE * 8; j++) {
+        for (usize j = 0; j < BLOCK_SIZE * 8; j++)
+        {
             usize block_no = i * BLOCK_SIZE * 8 + j;
-            if (block_no >= sblock->num_blocks) {
+            if (block_no >= sblock->num_blocks)
+            {
                 cache_release(bitmap_block);
                 PANIC();
             }
-            if (!bitmap_get((BitmapCell *)bitmap_block->data, j)) {
+            if (!bitmap_get((BitmapCell *)bitmap_block->data, j))
+            {
                 Block *block = cache_acquire(block_no);
                 memset(block->data, 0, BLOCK_SIZE);
                 cache_sync(ctx, block);
@@ -356,22 +374,24 @@ BlockCache bcache = {
     .free = cache_free,
 };
 
-void evict_block() {
+void evict_block()
+{
     Block *to_evict = NULL;
     usize oldest_time = (usize)-1;
 
     ListNode *node = head.next;
-    while (node != &head) {
+    while (node != &head)
+    {
         Block *block = container_of(node, Block, node);
 
-        // 跳过无法驱逐的块
-        if (block->pinned || block->acquired) {
+        if (block->pinned || block->acquired)
+        {
             node = node->next;
             continue;
         }
 
-        // 找到访问时间最早的块
-        if (block->last_accessed_time < oldest_time) {
+        if (block->last_accessed_time < oldest_time)
+        {
             oldest_time = block->last_accessed_time;
             to_evict = block;
         }
@@ -379,7 +399,8 @@ void evict_block() {
     }
 
     // 如果找到块，驱逐它
-    if (to_evict) {
+    if (to_evict)
+    {
         _detach_from_list(&to_evict->node);          // 从链表中移除
         cache_size--;
     }

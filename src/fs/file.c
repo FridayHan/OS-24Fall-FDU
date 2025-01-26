@@ -10,29 +10,36 @@
 // the global file table.
 static struct ftable ftable;
 
-void init_ftable() {
+void init_ftable()
+{
     // TODO: initialize your ftable.
-    for (int i = 0; i < NFILE; i++) {
-        ftable.files[i].ref = 0;  // 初始化每个文件对象的引用计数为0
-        ftable.files[i].type = FD_NONE;  // 将文件类型初始化为FD_NONE
-        ftable.files[i].off = 0;  // 偏移量初始化为0
-        ftable.files[i].readable = false;  // 默认不可读
-        ftable.files[i].writable = false;  // 默认不可写
+    for (int i = 0; i < NFILE; i++)
+    {
+        ftable.files[i].ref = 0;
+        ftable.files[i].type = FD_NONE;
+        ftable.files[i].off = 0;
+        ftable.files[i].readable = false;
+        ftable.files[i].writable = false;
     }
 }
 
-void init_oftable(struct oftable *oftable) {
+void init_oftable(struct oftable *oftable)
+{
     // TODO: initialize your oftable for a new process.
-    for (int i = 0; i < NOFILE; i++) {
+    for (int i = 0; i < NOFILE; i++)
+    {
         oftable->ofiles[i] = NULL;
     }
 }
 
 /* Allocate a file structure. */
-struct file* file_alloc() {
+struct file* file_alloc()
+{
     /* (Final) TODO BEGIN */
-    for (int i = 0; i < NFILE; i++) {
-        if (ftable.files[i].ref == 0) {
+    for (int i = 0; i < NFILE; i++)
+    {
+        if (ftable.files[i].ref == 0)
+        {
             ftable.files[i].ref = 1;
             return &ftable.files[i];
         }
@@ -43,7 +50,8 @@ struct file* file_alloc() {
 }
 
 /* Increment ref count for file f. */
-struct file* file_dup(struct file* f) {
+struct file* file_dup(struct file* f)
+{
     /* (Final) TODO BEGIN */
     f->ref++;
     /* (Final) TODO END */
@@ -51,32 +59,35 @@ struct file* file_dup(struct file* f) {
 }
 
 /* Close file f. (Decrement ref count, close when reaches 0.) */
-void file_close(struct file* f) {
+void file_close(struct file* f)
+{
     /* (Final) TODO BEGIN */
-    if (f == NULL) {
-        return;  // 如果文件是空指针，直接返回
-    }
+    if (f == NULL) return;
 
-    f->ref--;  // 减少引用计数
-
-    if (f->ref == 0) {  // 如果引用计数为 0，关闭文件
-        if (f->type == FD_INODE) {
-            inodes.put(NULL, f->ip);  // 添加 OpContext* 参数
-        } else if (f->type == FD_PIPE) {
-            pipe_close(f->pipe, 1);  // 添加 writable 参数
+    f->ref--;
+    if (f->ref == 0)
+    {
+        if (f->type == FD_INODE) 
+        {
+            inodes.put(NULL, f->ip);
         }
-        f->type = FD_NONE;  // 设置文件类型为无效状态
-        f->off = 0;  // 重置偏移量
+        else if (f->type == FD_PIPE) 
+        {
+            pipe_close(f->pipe, 1);
+        }
+        f->type = FD_NONE;
+        f->off = 0;
     }
     /* (Final) TODO END */
 }
 
 /* Get metadata about file f. */
-int file_stat(struct file* f, struct stat* st) {
+int file_stat(struct file* f, struct stat* st)
+{
     /* (Final) TODO BEGIN */
     if (f->type == FD_INODE) {
         inodes.lock(f->ip);
-        stati(f->ip, st);  // 修改为直接调用 stati 函数
+        stati(f->ip, st);
         inodes.unlock(f->ip);
         return 0;
     }

@@ -36,11 +36,9 @@ struct iovec {
  */
 static struct file *fd2file(int fd)
 {
-    /* (Final) TODO BEGIN */ // TODO: DONE
+    /* (Final) TODO BEGIN */
     struct oftable *oft = &thisproc()->oftable;
-    if (fd < 0 || fd >= NOFILE || oft->ofiles[fd] == 0) {
-        return NULL;
-    }
+    if (fd < 0 || fd >= NOFILE || oft->ofiles[fd] == 0) return NULL;
     return oft->ofiles[fd];
     /* (Final) TODO END */
 }
@@ -51,7 +49,7 @@ static struct file *fd2file(int fd)
  */
 int fdalloc(struct file *f)
 {
-    /* (Final) TODO BEGIN */ // TODO: DONE
+    /* (Final) TODO BEGIN */
     Proc* p = thisproc();
     for (int fd = 0; fd < NOFILE; fd++)
     {
@@ -78,13 +76,6 @@ define_syscall(mmap, void *addr, int length, int prot, int flags, int fd,
                int offset)
 {
     /* (Final) TODO BEGIN */
-    printk("sys_mmap: not implemented\n");
-    (void)addr; // 处理未使用的参数
-    (void)length; // 处理未使用的参数
-    (void)prot; // 处理未使用的参数
-    (void)flags; // 处理未使用的参数
-    (void)fd; // 处理未使用的参数
-    (void)offset; // 处理未使用的参数
     return -1;
     /* (Final) TODO END */
 }
@@ -92,9 +83,6 @@ define_syscall(mmap, void *addr, int length, int prot, int flags, int fd,
 define_syscall(munmap, void *addr, size_t length)
 {
     /* (Final) TODO BEGIN */
-    printk("sys_munmap: not implemented\n");
-    (void)addr; // 处理未使用的参数
-    (void)length; // 处理未使用的参数
     return -1;
     /* (Final) TODO END */
 }
@@ -146,16 +134,9 @@ define_syscall(close, int fd)
 {
     /* (Final) TODO BEGIN */
     struct file *f = fd2file(fd);
-    if (!f)
-        return -1;
-
-    // 清理文件描述符资源
-    struct oftable *oft = &thisproc()->oftable;  // 使用 oftable 结构体
-    oft->ofiles[fd] = 0;  // 使用 oftable 结构体
-
-    // 执行文件关闭操作
+    if (!f) return -1;
     file_close(f);
-
+    f = NULL;
     return 0;
     /* (Final) TODO END */
 }
@@ -289,11 +270,68 @@ bad:
 
     @return Inode* the created inode, or NULL if failed.
  */
-Inode *create(const char *path, short type, short major, short minor,
-              OpContext *ctx)
+Inode *create(const char *path, short type, short major, short minor, OpContext *ctx)
 {
     /* (Final) TODO BEGIN */
-    return NULL;
+    printk("create: path '%s', type %d, major:minor %d:%d\n", path, type, major, minor);
+    Inode *new_inode, *parent_dir;
+    char file_name[FILE_NAME_MAX_LENGTH];
+
+    if ((parent_dir = nameiparent(path, file_name, ctx)) == NULL)
+    {
+        printk("Error: Parent directory does not exist at %s:%d\n", __FILE__, __LINE__);
+        return NULL;
+    }
+
+    inodes.lock(parent_dir);
+    usize inode_number;
+    if ((inode_number = inodes.lookup(parent_dir, file_name, 0)))
+    {
+        inodes.unlock(parent_dir);
+        inodes.put(ctx, parent_dir);
+        new_inode = inodes.get(inode_number);
+        inodes.lock(new_inode);
+
+        if (type == INODE_REGULAR && new_inode->entry.type == INODE_REGULAR)
+        {
+            return new_inode;
+        }
+
+        printk("Error: Type mismatch or inode exists at %s:%d\n", __FILE__, __LINE__);
+        inodes.unlock(new_inode);
+        inodes.put(ctx, new_inode);
+        return NULL;
+    }
+
+    inode_number = inodes.alloc(ctx, type);
+    new_inode = inodes.get(inode_number);
+    inodes.lock(new_inode);
+
+    new_inode->entry.major = major;
+    new_inode->entry.minor = minor;
+    new_inode->entry.num_links = 1;
+    inodes.sync(ctx, new_inode, true);
+
+    if (type == INODE_DIRECTORY)
+    {
+        parent_dir->entry.num_links++;
+        inodes.sync(ctx, parent_dir, true);
+
+        if (inodes.insert(ctx, new_inode, ".", new_inode->inode_no) == (usize)(-1) ||
+            inodes.insert(ctx, new_inode, "..", parent_dir->inode_no) == (usize)(-1))
+        {
+            printk("Error: Failed to create '.' and '..' at %s:%d\n", __FILE__, __LINE__);
+        }
+    }
+
+    if (inodes.insert(ctx, parent_dir, file_name, new_inode->inode_no) == (usize)(-1))
+    {
+        printk("Error: Failed to insert inode into parent directory at %s:%d\n", __FILE__, __LINE__);
+    }
+
+    inodes.unlock(parent_dir);
+    inodes.put(ctx, parent_dir);
+    return new_inode;
     /* (Final) TODO END */
 }
 
@@ -405,33 +443,32 @@ define_syscall(chdir, const char *path)
      * Change the cwd (current working dictionary) of current process to 'path'.
      * You may need to do some validations.
      */
-    // 1. 验证路径
-    if (!user_strlen(path, 256))  // 确保路径的长度是合法的
-        return -1;
+    if (!user_strlen(path, 256)) return -1;
 
-    // 2. 获取目录的 Inode
     OpContext ctx;
+    Proc *p = thisproc();
     Inode *ip = NULL;
     bcache.begin_op(&ctx);
 
     // 查找路径对应的 Inode
-    if ((ip = namei(path, &ctx)) == NULL) {
+    if ((ip = namei(path, &ctx)) == NULL)
+    {
         bcache.end_op(&ctx);
-        return -1;  // 路径无效，返回错误
+        return -1;
     }
+    inodes.lock(ip);
 
-    // 3. 检查目标路径是否是目录
-    if (ip->entry.type != INODE_DIRECTORY) {
+    if (ip->entry.type != INODE_DIRECTORY)
+    {
+        inodes.unlock(ip);
+        inodes.put(&ctx, ip);
         bcache.end_op(&ctx);
-        return -1;  // 目标不是目录，返回错误
+        return -1;
     }
-
-    // 4. 设置进程的当前工作目录
-    thisproc()->cwd = ip;  // 使用 thisproc() 替代 current
-
-    // 5. 清理
+    inodes.unlock(ip);
+    inodes.put(&ctx, p->cwd);
+    p->cwd = ip;
     bcache.end_op(&ctx);
-
     return 0;
     /* (Final) TODO END */
 }
@@ -439,9 +476,6 @@ define_syscall(chdir, const char *path)
 define_syscall(pipe2, int pipefd[2], int flags)
 {
     /* (Final) TODO BEGIN */
-    printk("sys_pipe2: not implemented\n");
-    (void)pipefd; // 处理未使用的参数
-    (void)flags; // 处理未使用的参数
     return -1;
     /* (Final) TODO END */
 }

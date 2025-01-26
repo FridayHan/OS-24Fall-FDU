@@ -46,7 +46,7 @@ static int load_and_map_elf_segments(Inode *ip, Elf64_Ehdr *elf, struct pgdir *p
 
         struct section *sec = (struct section *)kalloc(sizeof(struct section));
         memset(sec, 0, sizeof(struct section));
-        init_sections(&sec->stnode);
+        init_section(sec);
         sec->begin = phdr.p_vaddr;
 
         if (phdr.p_flags == (PF_R | PF_X))
@@ -57,8 +57,8 @@ static int load_and_map_elf_segments(Inode *ip, Elf64_Ehdr *elf, struct pgdir *p
 
             sec->fp = file_alloc();
             sec->fp->ip = inodes.share(ip);
-            sec->fp->readable = TRUE;
-            sec->fp->writable = FALSE;
+            sec->fp->readable = true;
+            sec->fp->writable = false;
             sec->fp->ref = 1;
             sec->fp->off = 0;
             sec->fp->type = FD_INODE;
@@ -115,7 +115,7 @@ static int setup_user_stack(struct pgdir *pgdir, char *const argv[], char *const
     u64 stack_top = USER_STACK_TOP - RESERVE_SIZE;
     struct section *st_ustack = (struct section *)kalloc(sizeof(struct section));
     memset(st_ustack, 0, sizeof(struct section));
-    init_sections(&st_ustack->stnode);
+    init_section(st_ustack);
     st_ustack->begin = stack_top - USER_STACK_SIZE;
     st_ustack->end = stack_top;
     st_ustack->flags = ST_USTACK;
@@ -296,7 +296,8 @@ int execve(const char *path, char *const argv[], char *const envp[])
     _insert_into_list(&pgdir->section_head, &heap->stnode); // 将堆段插入到页表的section链表中
 
     // 设置用户栈
-    if (setup_user_stack(pgdir, argv, envp) < 0) {
+    if (setup_user_stack(pgdir, argv, envp) < 0)
+    {
         // 如果设置栈失败，释放资源并返回错误
         free_pgdir(pgdir); // 释放新页表
         return -1;

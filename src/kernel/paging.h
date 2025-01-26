@@ -25,8 +25,18 @@ struct section {
     u64 length; // Length of mapped content in file
 };
 
+
+struct section *lookup_section(struct pgdir *pd, u64 va);
+void handle_missing_pte(struct pgdir *pd, u64 addr, struct section *fault_sec);
+int handle_permission_fault(struct pgdir *pd, u64 addr, struct section *fault_sec);
 int pgfault_handler(u64 iss);
+
+void init_section(struct section *sec);
 void init_sections(ListNode *section_head);
+
+void free_section_pages(struct pgdir *pd, struct section *sec);
+void free_section(struct pgdir *pd, struct section *sec);
 void free_sections(struct pgdir *pd);
+
 void copy_sections(ListNode *from_head, ListNode *to_head);
 u64 sbrk(i64 size);

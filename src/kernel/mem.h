@@ -3,25 +3,19 @@
 #include <common/defines.h>
 #include <common/list.h>
 #include <common/rc.h>
-
-#define PAGE_COUNT ((P2K(PHYSTOP) - PAGE_BASE((u64) & end)) / PAGE_SIZE - 1)
-
-struct page {
-    RefCount ref;
-};
 #include <common/rc.h>
+#include <common/list.h>
+#include <common/string.h>
 #include <common/spinlock.h>
 #include <driver/memlayout.h>
 #include <kernel/mem.h>
 #include <kernel/printk.h>
-#include <common/list.h>
-#include <common/string.h>
 
+#define PAGE_COUNT ((P2K(PHYSTOP) - PAGE_BASE((u64) & end)) / PAGE_SIZE - 2)
 #define MAX_SIZE_CLASS 35
 #define USABLE_PAGE_SIZE(block_size) (PAGE_SIZE - round_up((u64)sizeof(Page), (u64)block_size))
 
 static const unsigned long long size_classes[MAX_SIZE_CLASS] = {8, 12, 16, 24, 32, 40, 48, 56, 64, 80, 96, 128, 160, 192, 216, 232, 256, 320, 352, 384, 448, 512, 768, 904, 1024, 1200, 1320, 1520, 1640, 1720, 2048};
-
 extern char end[];
 
 typedef struct Page {
@@ -52,3 +46,4 @@ WARN_RESULT void *kalloc(unsigned long long);
 void kfree(void *);
 
 WARN_RESULT void *get_zero_page();
+void kshare_page(u64 addr);

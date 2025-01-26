@@ -56,7 +56,7 @@ void main()
         arch_fence();
 
         // Set a flag indicating that the secondary CPUs can start executing.
-        boot_secondary_cpus = true;
+        boot_secondary_cpus = false;
     } else {
         while (!boot_secondary_cpus)
             ;
