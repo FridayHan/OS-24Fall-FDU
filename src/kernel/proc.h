@@ -13,7 +13,9 @@ enum procstate { UNUSED, RUNNABLE, RUNNING, SLEEPING, DEEPSLEEPING, ZOMBIE };
 
 typedef struct UserContext {
     // TODO: customize your trap frame
-    u64 res, tpidr_el0, q0_high, q0_low, spsr, elr, sp;
+    u64 res, tpidr_el0;
+    u64 q0_high, q0_low;
+    u64 spsr, elr, sp;
     u64 x[31];
 } UserContext;
 
@@ -53,11 +55,6 @@ typedef struct Proc {
     struct oftable oftable;
     Inode *cwd;
 } Proc;
-
-extern Proc root_proc;
-extern ListNode free_pid_list; 
-extern SpinLock pid_lock;
-extern SpinLock proc_lock;
 
 void init_kproc();
 void init_proc(Proc *);

@@ -1,12 +1,13 @@
-#include <kernel/sched.h>
-#include <kernel/proc.h>
-#include <kernel/mem.h>
-#include <kernel/printk.h>
 #include <aarch64/intrinsic.h>
-#include <kernel/cpu.h>
 #include <common/rbtree.h>
 #include <common/spinlock.h>
+#include <common/string.h>
 #include <driver/clock.h>
+#include <kernel/cpu.h>
+#include <kernel/mem.h>
+#include <kernel/printk.h>
+#include <kernel/proc.h>
+#include <kernel/sched.h>
 
 extern bool panic_flag;
 
@@ -157,11 +158,11 @@ static Proc *pick_next()
 
     if (panic_flag) return cpus[cpuid()].sched.idle_proc;
 
-    auto next = _rb_first(&run_tree);
+    rb_node next = _rb_first(&run_tree);
 
     if (next)
     {
-        auto proc = container_of(next, Proc, schinfo.rb_sched_node);
+        Proc* proc = container_of(next, Proc, schinfo.rb_sched_node);
         return proc;
     }
     return cpus[cpuid()].sched.idle_proc;
@@ -202,7 +203,7 @@ static void update_this_proc(Proc *p)
 
 void sched(enum procstate new_state)
 {
-    auto this = thisproc();
+    Proc* this = thisproc();
     if (this->killed && new_state != ZOMBIE)
     {
         release_sched_lock();
@@ -211,7 +212,7 @@ void sched(enum procstate new_state)
     
     ASSERT(this->state == RUNNING);
     update_this_state(new_state);
-    auto next = pick_next();
+    Proc* next = pick_next();
     update_this_proc(next);
     ASSERT(next->state == RUNNABLE);
     next->state = RUNNING;

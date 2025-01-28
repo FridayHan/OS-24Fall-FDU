@@ -10,7 +10,7 @@
 #define KSTACK_SIZE 2048
 #define MAX_DATA_BLOCKS 1024
 
-#define MAX_PID 32768
+// #define MAX_PID 32768
 #define INITIAL_PID_COUNT 2
 
 // maximum number of distinct block numbers can be recorded in the log header.

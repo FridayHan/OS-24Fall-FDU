@@ -38,7 +38,7 @@ static struct file *fd2file(int fd)
 {
     /* (Final) TODO BEGIN */
     struct oftable *oft = &thisproc()->oftable;
-    if (fd < 0 || fd >= NOFILE || oft->ofiles[fd] == 0) return NULL;
+    if (fd < 0 || fd >= NOFILE) return NULL;
     return oft->ofiles[fd];
     /* (Final) TODO END */
 }
@@ -122,7 +122,8 @@ define_syscall(writev, int fd, struct iovec *iov, int iovcnt)
     if (!f || iovcnt <= 0 || !user_readable(iov, sizeof(struct iovec) * iovcnt))
         return -1;
     usize tot = 0;
-    for (p = iov; p < iov + iovcnt; p++) {
+    for (p = iov; p < iov + iovcnt; p++)
+    {
         if (!user_readable(p->iov_base, p->iov_len))
             return -1;
         tot += file_write(f, p->iov_base, p->iov_len);
@@ -136,7 +137,7 @@ define_syscall(close, int fd)
     struct file *f = fd2file(fd);
     if (!f) return -1;
     file_close(f);
-    f = NULL;
+    thisproc()->oftable.ofiles[fd] = NULL;
     return 0;
     /* (Final) TODO END */
 }
@@ -149,16 +150,17 @@ define_syscall(fstat, int fd, struct stat *st)
     return file_stat(f, st);
 }
 
-define_syscall(newfstatat, int dirfd, const char *path, struct stat *st,
-               int flags)
+define_syscall(newfstatat, int dirfd, const char *path, struct stat *st, int flags)
 {
     if (!user_strlen(path, 256) || !user_writeable(st, sizeof(*st)))
         return -1;
-    if (dirfd != AT_FDCWD) {
+    if (dirfd != AT_FDCWD)
+    {
         printk("sys_fstatat: dirfd unimplemented\n");
         return -1;
     }
-    if (flags != 0) {
+    if (flags != 0)
+    {
         printk("sys_fstatat: flags unimplemented\n");
         return -1;
     }
@@ -166,7 +168,8 @@ define_syscall(newfstatat, int dirfd, const char *path, struct stat *st,
     Inode *ip;
     OpContext ctx;
     bcache.begin_op(&ctx);
-    if ((ip = namei(path, &ctx)) == 0) {
+    if ((ip = namei(path, &ctx)) == 0)
+    {
         bcache.end_op(&ctx);
         return -1;
     }
@@ -184,7 +187,8 @@ static int isdirempty(Inode *dp)
     usize off;
     DirEntry de;
 
-    for (off = 2 * sizeof(de); off < dp->entry.num_bytes; off += sizeof(de)) {
+    for (off = 2 * sizeof(de); off < dp->entry.num_bytes; off += sizeof(de))
+    {
         if (inodes.read(dp, (u8 *)&de, off, sizeof(de)) != sizeof(de))
             PANIC();
         if (de.inode_no != 0)
@@ -204,7 +208,8 @@ define_syscall(unlinkat, int fd, const char *path, int flag)
         return -1;
     OpContext ctx;
     bcache.begin_op(&ctx);
-    if ((dp = nameiparent(path, name, &ctx)) == 0) {
+    if ((dp = nameiparent(path, name, &ctx)) == 0)
+    {
         bcache.end_op(&ctx);
         return -1;
     }
@@ -224,16 +229,18 @@ define_syscall(unlinkat, int fd, const char *path, int flag)
 
     if (ip->entry.num_links < 1)
         PANIC();
-    if (ip->entry.type == INODE_DIRECTORY && !isdirempty(ip)) {
+    if (ip->entry.type == INODE_DIRECTORY && !isdirempty(ip))
+    {
         inodes.unlock(ip);
         inodes.put(&ctx, ip);
         goto bad;
     }
 
     memset(&de, 0, sizeof(de));
-    if (inodes.write(&ctx, dp, (u8 *)&de, sizeof(de) * off, sizeof(de)) != sizeof(de))
+    if (inodes.write(&ctx, dp, (u8 *)&de, off, sizeof(de)) != sizeof(de))
         PANIC();
-    if (ip->entry.type == INODE_DIRECTORY) {
+    if (ip->entry.type == INODE_DIRECTORY)
+    {
         dp->entry.num_links--;
         inodes.sync(&ctx, dp, true);
     }
@@ -341,32 +348,38 @@ define_syscall(openat, int dirfd, const char *path, int omode)
     struct file *f;
     Inode *ip;
 
-    if (!user_strlen(path, 256))
-        return -1;
+    if (!user_strlen(path, 256)) return -1;
 
-    if (dirfd != AT_FDCWD) {
+    if (dirfd != AT_FDCWD)
+    {
         printk("sys_openat: dirfd unimplemented\n");
         return -1;
     }
 
     OpContext ctx;
     bcache.begin_op(&ctx);
-    if (omode & O_CREAT) {
+    if (omode & O_CREAT)
+    {
         // FIXME: Support acl mode.
         ip = create(path, INODE_REGULAR, 0, 0, &ctx);
-        if (ip == 0) {
+        if (ip == 0)
+        {
             bcache.end_op(&ctx);
             return -1;
         }
-    } else {
-        if ((ip = namei(path, &ctx)) == 0) {
+    }
+    else
+    {
+        if ((ip = namei(path, &ctx)) == 0)
+        {
             bcache.end_op(&ctx);
             return -1;
         }
         inodes.lock(ip);
     }
 
-    if ((f = file_alloc()) == 0 || (fd = fdalloc(f)) < 0) {
+    if ((f = file_alloc()) == 0 || (fd = fdalloc(f)) < 0)
+    {
         if (f)
             file_close(f);
         inodes.unlock(ip);
@@ -390,17 +403,20 @@ define_syscall(mkdirat, int dirfd, const char *path, int mode)
     Inode *ip;
     if (!user_strlen(path, 256))
         return -1;
-    if (dirfd != AT_FDCWD) {
+    if (dirfd != AT_FDCWD)
+    {
         printk("sys_mkdirat: dirfd unimplemented\n");
         return -1;
     }
-    if (mode != 0) {
+    if (mode != 0)
+    {
         printk("sys_mkdirat: mode unimplemented\n");
         return -1;
     }
     OpContext ctx;
     bcache.begin_op(&ctx);
-    if ((ip = create(path, INODE_DIRECTORY, 0, 0, &ctx)) == 0) {
+    if ((ip = create(path, INODE_DIRECTORY, 0, 0, &ctx)) == 0)
+    {
         bcache.end_op(&ctx);
         return -1;
     }
@@ -413,9 +429,9 @@ define_syscall(mkdirat, int dirfd, const char *path, int mode)
 define_syscall(mknodat, int dirfd, const char *path, mode_t mode, dev_t dev)
 {
     Inode *ip;
-    if (!user_strlen(path, 256))
-        return -1;
-    if (dirfd != AT_FDCWD) {
+    if (!user_strlen(path, 256)) return -1;
+    if (dirfd != AT_FDCWD)
+    {
         printk("sys_mknodat: dirfd unimplemented\n");
         return -1;
     }
@@ -425,7 +441,8 @@ define_syscall(mknodat, int dirfd, const char *path, mode_t mode, dev_t dev)
     printk("mknodat: path '%s', major:minor %u:%u\n", path, ma, mi);
     OpContext ctx;
     bcache.begin_op(&ctx);
-    if ((ip = create(path, INODE_DEVICE, (short)ma, (short)mi, &ctx)) == 0) {
+    if ((ip = create(path, INODE_DEVICE, (short)ma, (short)mi, &ctx)) == 0)
+    {
         bcache.end_op(&ctx);
         return -1;
     }
@@ -443,7 +460,8 @@ define_syscall(chdir, const char *path)
      * Change the cwd (current working dictionary) of current process to 'path'.
      * You may need to do some validations.
      */
-    if (!user_strlen(path, 256)) return -1;
+
+    // if (!user_strlen(path, 256)) return -1;
 
     OpContext ctx;
     Proc *p = thisproc();
@@ -467,8 +485,8 @@ define_syscall(chdir, const char *path)
     }
     inodes.unlock(ip);
     inodes.put(&ctx, p->cwd);
-    p->cwd = ip;
     bcache.end_op(&ctx);
+    p->cwd = ip;
     return 0;
     /* (Final) TODO END */
 }

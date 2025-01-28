@@ -12,27 +12,10 @@
 #include <kernel/pt.h>
 #include <kernel/sched.h>
 
-#define FAULT_STATUS_CODE_MASK 0x3f
-
-#define ADDRESS_SIZE_FAULT_0 0b000000
-#define ADDRESS_SIZE_FAULT_1 0b000001
-#define ADDRESS_SIZE_FAULT_2 0b000010
-#define ADDRESS_SIZE_FAULT_3 0b000011
-
-#define TRANSLATION_FAULT_0 0b000100
-#define TRANSLATION_FAULT_1 0b000101
-#define TRANSLATION_FAULT_2 0b000110
-#define TRANSLATION_FAULT_3 0b000111
-
-#define ACCESS_FLAG_FAULT_0 0b001000
-#define ACCESS_FLAG_FAULT_1 0b001001
-#define ACCESS_FLAG_FAULT_2 0b001010
-#define ACCESS_FLAG_FAULT_3 0b001011
-
-#define PERMISSION_FAULT_0 0b001100
-#define PERMISSION_FAULT_1 0b001101
-#define PERMISSION_FAULT_2 0b001110
-#define PERMISSION_FAULT_3 0b001111
+#define ISS_TYPE_MASK 0x3c
+#define ISS_TRANS_FAULT 0X4
+#define ISS_ACC_FAULT 0X8
+#define ISS_PERMI_FAULT 0Xc
 
 void init_section(struct section *sec)
 {
@@ -47,6 +30,9 @@ void init_sections(ListNode *section_head)
     /* (Final) TODO END */
 }
 
+/**
+ * free pages referred by a section
+*/
 void free_section_pages(struct pgdir *pd, struct section *sec)
 {
     u64 begin = PAGE_BASE(sec->begin);
@@ -74,66 +60,15 @@ void free_sections(struct pgdir *pd)
 {
     /* (Final) TODO BEGIN */
     acquire_spinlock(&pd->lock);
-    struct section *prev_sec = NULL;
-    _for_in_list(node, &pd->section_head)
-    {
-        if (node == &pd->section_head) continue;
-        struct section *sec = container_of(node, struct section, stnode);
+    ListNode *p = pd->section_head.next;
+    while (p != &(pd->section_head)) {
+        struct section *sec = container_of(p, struct section, stnode);
         free_section(pd, sec);
-        if (!prev_sec) _detach_from_list(&prev_sec->stnode);
-        prev_sec = sec;
+        p = p->next;
+        _detach_from_list(&sec->stnode);
     }
     release_spinlock(&pd->lock);
-    /* (Final) TODO END */
-}
 
-u64 sbrk(i64 size)
-{
-    /**
-     * (Final) TODO BEGIN 
-     * 
-     * Increase the heap size of current process by `size`.
-     * If `size` is negative, decrease heap size. `size` must
-     * be a multiple of PAGE_SIZE.
-     * 
-     * Return the previous heap_end.
-     */
-
-    ASSERT(size % PAGE_SIZE == 0);
-    Proc *p = thisproc();
-    struct pgdir *pd = &p->pgdir;
-    struct section *heap_sec;
-
-    acquire_spinlock(&pd->lock);
-    ASSERT((heap_sec = lookup_section(pd, ST_HEAP)));
-
-    if (size == 0)
-    {
-        release_spinlock(&pd->lock);
-        return heap_sec->end;
-    }
-
-    u64 prev_heap_end = heap_sec->end;
-    heap_sec->end += size;
-
-    if (size > 0) ASSERT(heap_sec->end > prev_heap_end);
-    else
-    {
-        ASSERT(heap_sec->end < prev_heap_end);
-
-        for (u64 i = heap_sec->end; i < prev_heap_end; i += PAGE_SIZE)
-        {
-            PTEntriesPtr pte = get_pte(pd, i, false);
-            if (pte && (*pte & PTE_VALID))
-            {
-                kfree_page((void *)P2K(PTE_ADDRESS(*pte)));
-                *pte = 0;
-            }
-        }
-    }
-
-    release_spinlock(&pd->lock);
-    return prev_heap_end;
     /* (Final) TODO END */
 }
 
@@ -150,63 +85,50 @@ struct section *lookup_section(struct pgdir *pd, u64 va)
     return NULL;
 }
 
-void handle_missing_pte(struct pgdir *pd, u64 addr, struct section *fault_sec)
+u64 sbrk(i64 size)
 {
-    printk("PTE missing: pd=%p, addr=%p, fault_sec=%p\n", pd, (void *)addr, fault_sec);
-    PTEntriesPtr pte = get_pte(pd, addr, true);
-    void* pg = kalloc_page();
+    /**
+     * (Final) TODO BEGIN 
+     * 
+     * Increase the heap size of current process by `size`.
+     * If `size` is negative, decrease heap size. `size` must
+     * be a multiple of PAGE_SIZE.
+     * 
+     * Return the previous heap_end.
+     */
+    // printk("sbrk size:%lld\n",size);
+    ASSERT(size % PAGE_SIZE == 0);
+    Proc *p = thisproc();
+    struct pgdir *pd = &p->pgdir;
+    struct section *sec;
 
-    if ((fault_sec->flags & ST_HEAP) == ST_HEAP)
-    {
-        *pte = (K2P(pg) | PTE_USER_DATA | PTE_RW);
-    }
-    else if ((fault_sec->flags & ST_TEXT) == ST_TEXT)
-    {
-        usize i = PAGE_BASE(addr) < fault_sec->begin ? fault_sec->begin : PAGE_BASE(addr);
-        usize start = fault_sec->offset + (i - fault_sec->begin);
-        usize n = fault_sec->end - i > PAGE_SIZE ? PAGE_SIZE : fault_sec->end - i;
-        usize little_off = VA_OFFSET(i);
+    acquire_spinlock(&pd->lock);
 
-        inodes.lock(fault_sec->fp->ip);
-        inodes.read(fault_sec->fp->ip, (u8 *)pg + little_off, start, n);
-        inodes.unlock(fault_sec->fp->ip);
-        *pte = (K2P(pg) | PTE_USER_DATA | PTE_RO);
-    }
-    else if ((fault_sec->flags & ST_FILE) == ST_FILE)
-    {
-        usize i = PAGE_BASE(addr) < fault_sec->begin ? fault_sec->begin : PAGE_BASE(addr);
-        usize start = fault_sec->offset + (i - fault_sec->begin);
-        usize n = fault_sec->end - i > PAGE_SIZE ? PAGE_SIZE : fault_sec->end - i;
-        usize little_off = VA_OFFSET(i);
+    // get heap section of current process
+    ASSERT((sec = lookup_section(pd, ST_HEAP)));
 
-        inodes.lock(fault_sec->fp->ip);
-        inodes.read(fault_sec->fp->ip, (u8 *)pg + little_off, start, n);
-        inodes.unlock(fault_sec->fp->ip);
-        *pte = (K2P(pg) | PTE_USER_DATA | PTE_RW);
-    }
-    else PANIC();
-}
-
-int handle_permission_fault(struct pgdir *pd, u64 addr, struct section *fault_sec)
-{
-    printk("Permission fault: pd=%p, addr=%p, fault_sec=%p\n", pd, (void *)addr, fault_sec);
-    PTEntriesPtr pte = get_pte(pd, addr, false);
-    ASSERT(pte != NULL && *pte != NULL);
-
-    if ((*pte & PTE_USER) == 0) return -1;
-
-    if ((*pte & PTE_RO) == PTE_RO)
-    {
-        if ((fault_sec->flags & ST_RO) == ST_RO) return -1;
-        else 
-        {
-            void *new_pg = kalloc_page();
-            void *old_pg = (void *)(P2K(*pte & ~(PAGE_SIZE - 1)));
-            memcpy(new_pg, old_pg, PAGE_SIZE);
-            *pte = (K2P(new_pg) | PTE_USER_DATA | PTE_RW);
+    if (size == 0)
+        return sec->end;
+    u64 ret = sec->end;
+    sec->end += size;
+    if (size > 0) {
+        ASSERT(sec->end > ret);
+    } else {
+        ASSERT(sec->end < ret);
+        // free pages if heap size shrinks
+        // printk("checking heap is aligned to page or not...\nbegin: %llu, end: %llu\n",
+        //        sec->begin, sec->end);
+        for (u64 i = sec->end; i < ret; i += PAGE_SIZE) {
+            PTEntriesPtr pte = get_pte(pd, i, false);
+            if (pte && *pte & PTE_VALID) {
+                kfree_page((void *)P2K(PTE_ADDRESS(*pte)));
+                *pte = 0;
+            }
         }
     }
-    return 1;
+    release_spinlock(&pd->lock);
+    return ret;
+    /* (Final) TODO END */
 }
 
 int pgfault_handler(u64 iss)
@@ -214,8 +136,8 @@ int pgfault_handler(u64 iss)
     printk("Page fault: %llx\n", iss);
     Proc *p = thisproc();
     struct pgdir *pd = &p->pgdir;
-    u64 fault_addr = arch_get_far();
-    struct section *fault_sec = lookup_section(pd, fault_addr);
+    u64 addr =
+            arch_get_far(); // Attempting to access this address caused the page fault
 
     /** 
      * (Final) TODO BEGIN
@@ -225,51 +147,109 @@ int pgfault_handler(u64 iss)
      * 3. Handle the page fault accordingly.
      * 4. Return to user code or kill the process.
      */
-    if (fault_sec == NULL)
-    {
-        printk("Invalid address: %p\n", (void *)fault_addr);
-        printk("Faulting instruction: %p\n", (void *)arch_get_elr());
-        p->killed = true;
-        return -1;
-    }
 
-    u64 fsc = iss & FAULT_STATUS_CODE_MASK;
-    switch (fsc)
+    // printk("-----------\npage fault!\n");
+    // printk("my pid: %d\n", p->pid);
+    // printk("addr: %llx\n", addr);
+    struct section *sec = NULL;
+    printk("lookup_section: pd=%p, va=%p\n", pd, (void *)addr);
+    acquire_spinlock(&pd->lock);
+    _for_in_list(p, &pd->section_head)
     {
-        case ADDRESS_SIZE_FAULT_0:
-        case ADDRESS_SIZE_FAULT_1:
-        case ADDRESS_SIZE_FAULT_2:
-        case ADDRESS_SIZE_FAULT_3:
+        if (p == &pd->section_head) {
+            continue;
+        }
+        sec = container_of(p, struct section, stnode);
+        if (sec->begin <= addr && addr < sec->end)
+            break;
+        else
+            sec = NULL;
+    }
+    ASSERT(sec);
+    /**
+     * @todo mmap
+    */
+    void *pg = NULL;
+    // printk("flags: %lld\n", sec->flags);
+    // while (1)
+    // {
+    // }
+    printk("PTE missing: pd=%p, addr=%p, fault_sec=%p\n", pd, (void *)addr, sec);
+    switch (sec->flags) {
+    case ST_HEAP:
+        // printk("heap\n");
+        pg = kalloc_page();
+        vmmap(pd, addr, p, PTE_USER_DATA | PTE_RW);
+        // printk("vmmap\n");
+        break;
+    case ST_DATA:
+        // printk("bss\n");
+        if ((ISS_TYPE_MASK & iss) == ISS_PERMI_FAULT) {
+            pg = kalloc_page();
+            auto pte = get_pte(pd, addr, false);
+            ASSERT(pte);
+            memcpy(pg, (void *)P2K(PTE_ADDRESS(*pte)),
+                   PAGE_SIZE); // copy the previous page
+            kfree_page((void *)P2K(
+                    PTE_ADDRESS(*pte))); // unshare the previously shared page
+            vmmap(pd, addr, pg, PTE_USER_DATA | PTE_RW);
+        } else {
             PANIC();
-            break;
-        case TRANSLATION_FAULT_0:
-        case TRANSLATION_FAULT_1:
-        case TRANSLATION_FAULT_2:
-        case TRANSLATION_FAULT_3:
-            handle_missing_pte(pd, fault_addr, fault_sec);
-            break;
-        case ACCESS_FLAG_FAULT_0:
-        case ACCESS_FLAG_FAULT_1:
-        case ACCESS_FLAG_FAULT_2:
-        case ACCESS_FLAG_FAULT_3:
-            PANIC();
-            break;
-        case PERMISSION_FAULT_0:
-        case PERMISSION_FAULT_1:
-        case PERMISSION_FAULT_2:
-        case PERMISSION_FAULT_3:
-            if (handle_permission_fault(pd, fault_addr, fault_sec) < 0)
-            {
-                p->killed = true;
-                return -1;
+        }
+        break;
+    case ST_TEXT:
+        if (sec->length == 0) {
+            // printk("text section with length 0!\n");
+            exit(-1);
+        }
+        usize len = sec->length;
+        u64 va = sec->begin;
+        sec->fp->off = sec->offset;
+        while (len) {
+            usize cur_len = MIN(len, (u64)PAGE_SIZE - VA_OFFSET(va));
+            auto pte = get_pte(pd, va, true);
+            if (!(*pte & PTE_VALID)) {
+                pg = kalloc_page();
+                vmmap(pd, va, pg, PTE_USER_DATA | PTE_RO);
             }
-            break;
-        default:
-            PANIC();
-    }
+            if (file_read(sec->fp,
+                          (char *)(P2K(PTE_ADDRESS(*pte)) + VA_OFFSET(va)),
+                          cur_len) != (isize)cur_len)
+                PANIC();
+            len -= cur_len;
+            va += cur_len;
+        }
+        sec->length = 0;
+        file_close(sec->fp);
+        sec->fp = NULL;
+        // printk("finish text pgfault\n");
+        break;
+    case ST_USTACK:
+        if ((ISS_TYPE_MASK & iss) == ISS_PERMI_FAULT) {
+            pg = kalloc_page();
+            auto pte = get_pte(pd, addr, false);
+            ASSERT(pte);
+            memcpy(pg, (void *)P2K(PTE_ADDRESS(*pte)), PAGE_SIZE);
+            kfree_page((void *)P2K(
+                    PTE_ADDRESS(*pte))); // unshare the previously shared page
+            vmmap(pd, addr, pg, PTE_USER_DATA | PTE_RW);
+        } else {
+            // copy on write
+            printk("user stack COW\n");
+            pg = kalloc_page();
+            vmmap(pd, addr, p, PTE_USER_DATA | PTE_RW);
+        }
+        break;
+        /**
+     * @todo other flags
+    */
 
-    arch_tlbi_vmalle1is();
-    return 1;
+    default:
+        printk("Wrong flags!\n");
+    }
+    // printk("-----------\n");
+    release_spinlock(&pd->lock);
+    return 0;
     /* (Final) TODO END */
 }
 
@@ -283,12 +263,6 @@ void copy_sections(ListNode *from_head, ListNode *to_head)
         struct section *to_sec = (struct section*)kalloc(sizeof(struct section));
         if (!to_sec) PANIC();
         memcpy(to_sec, from_sec, sizeof(struct section));
-        // if (from_sec->flags & ST_FILE)
-        // {
-        //     to_sec->fp = from_sec->fp;
-        //     to_sec->offset = from_sec->offset;
-        //     to_sec->length = from_sec->length;
-        // }
         _insert_into_list(to_head, &to_sec->stnode);
     }
     /* (Final) TODO END */

@@ -25,6 +25,8 @@ typedef struct Page {
     unsigned long long block_size;
     unsigned long long free_list_offset;
     bool in_free_list;
+    // int cnt;
+    RefCount rc;
 } Page;
 
 typedef struct {
@@ -47,3 +49,5 @@ void kfree(void *);
 
 WARN_RESULT void *get_zero_page();
 void kshare_page(u64 addr);
+
+void print_rc(u64 addr);

@@ -1,12 +1,13 @@
 #include <aarch64/intrinsic.h>
+#include <common/buf.h>
+#include <common/string.h>
+#include <driver/virtio.h>
 #include <kernel/cpu.h>
+#include <kernel/mem.h>
+#include <kernel/paging.h>
 #include <kernel/printk.h>
 #include <kernel/sched.h>
 #include <test/test.h>
-#include <driver/virtio.h>
-#include <common/buf.h>
-#include <kernel/mem.h>
-#include <kernel/paging.h>
 
 #define INIT_ELR 0x400000
 #define INIT_SP 0x80000000

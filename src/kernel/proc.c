@@ -54,13 +54,12 @@ void init_proc(Proc *p)
     init_schinfo(&p->schinfo);
     init_pgdir(&p->pgdir);
 
-    p->kstack = kalloc(KSTACK_SIZE);
-    if (!p->kstack) PANIC();
-    memset(p->kstack, 0, KSTACK_SIZE);
+    p->kstack = kalloc_page();
+    memset((void *)p->kstack, 0, PAGE_SIZE);
 
-    p->kcontext = (KernelContext *)(p->kstack + KSTACK_SIZE - sizeof(KernelContext) - sizeof(UserContext));
-    p->ucontext = (UserContext *)(p->kstack + KSTACK_SIZE - sizeof(UserContext));
-    ASSERT(sizeof(KernelContext) + sizeof(UserContext) <= KSTACK_SIZE);
+    p->kcontext = (KernelContext *)(p->kstack + PAGE_SIZE - sizeof(KernelContext) - sizeof(UserContext));
+    p->ucontext = (UserContext *)(p->kstack + PAGE_SIZE - sizeof(UserContext));
+    ASSERT(sizeof(KernelContext) + sizeof(UserContext) <= PAGE_SIZE);
 
     if (inodes.root) p->cwd = inodes.share(inodes.root);
     init_oftable(&p->oftable);
@@ -175,18 +174,11 @@ NO_RETURN void exit(int code)
         if (is_zombie(cp))
         {
             post_sem(&root_proc.childexit);
-            // printk("proc.c: post_sem %p\n", &root_proc.childexit);
         }
     }
 
     post_sem(&this->parent->childexit);
-    // printk("proc.c: post_sem %p\n", &this->parent->childexit);
-
-    // free_pgdir(&this->pgdir);
-
     deallocate_pid(this->pid);
-
-    // post_sem(&this->parent->childexit);
     acquire_sched_lock();
     release_spinlock(&proc_lock);
 
@@ -195,12 +187,12 @@ NO_RETURN void exit(int code)
     decrement_rc(&this->cwd->rc);
     for (int i = 0; i < NOFILE; i++)
     {
-        if (this->oftable.ofiles[i]) {
+        if (this->oftable.ofiles[i])
+        {
             file_close(this->oftable.ofiles[i]);
             this->oftable.ofiles[i] = 0;
         }
     }
-
     sched(ZOMBIE);
 
     PANIC(); // prevent the warning of 'no_return function returns'
@@ -208,10 +200,7 @@ NO_RETURN void exit(int code)
 
 Proc *dfs(Proc *p, int pid)
 {
-    if (p->pid == pid)
-    {
-        return p;
-    }
+    if (p->pid == pid) return p;
     else if (!_empty_list(&p->children))
     {
         _for_in_list(node, &p->children)
@@ -219,10 +208,7 @@ Proc *dfs(Proc *p, int pid)
             if (node == &p->children) continue;
             Proc *cp = container_of(node, Proc, ptnode);
             Proc *ret = dfs(cp, pid);
-            if (ret)
-            {
-                return ret;
-            }
+            if (ret) return ret;
         }
     }
     return NULL;
@@ -326,9 +312,9 @@ void copy_page_directory(Proc *parent_proc, Proc *child_proc)
         _insert_into_list(&child_proc->pgdir.section_head, &new_sec->stnode);
 
         // 处理每一页的映射
-        for (auto va = PAGE_BASE(sec->begin); va < sec->end; va += PAGE_SIZE)
+        for (u64 va = PAGE_BASE(sec->begin); va < sec->end; va += PAGE_SIZE)
         {
-            auto pte = get_pte(&parent_proc->pgdir, va, false);
+            PTEntriesPtr pte = get_pte(&parent_proc->pgdir, va, false);
             if (pte && (*pte & PTE_VALID))
             {
                 *pte |= PTE_RO; // 冻结共享页面
@@ -385,40 +371,6 @@ int fork()
      * 6. Activate the new proc and return its pid.
      */
     printk("fork\n");
-    // // 1. 创建新的子进程
-    // Proc *p = thisproc();
-    // Proc *child = create_proc();
-    // if (!child)
-    // {
-    //     return -1;
-    // }
-
-    // // 2. 复制父进程的内存空间
-    // copy_sections(&p->pgdir.section_head, &child->pgdir.section_head);
-    // for (int fd = 0; fd < NOFILE; fd++)
-    // {
-    //     if (p->oftable.ofiles[fd])
-    //     {
-    //         child->oftable.ofiles[fd] = file_dup(p->oftable.ofiles[fd]);
-    //     }
-    // }
-    // child->cwd = p->cwd;
-
-    // // 3. 复制父进程的 trapframe
-    // *child->ucontext = *p->ucontext;
-    // child->ucontext->x[0] = 0; // 子进程返回值为 0
-    // child->ucontext->elr = (u64)trap_return;
-    // child->ucontext->sp = (u64)get_zero_page();
-
-    // // 4. 设置父进程为当前进程
-    // set_parent_to_this(child);
-
-    // // 5. 设置子进程状态为 RUNNABLE
-    // child->state = RUNNABLE;
-
-    // // 6. 激活子进程并返回其 pid
-    // activate_proc(child);
-    // return child->pid;
     Proc *parent_proc = thisproc();
     
     // 1. 创建子进程

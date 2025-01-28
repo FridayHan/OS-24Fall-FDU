@@ -64,12 +64,14 @@ void kinit()
     zero_page = (void *)start_addr;
     memset(zero_page, 0, PAGE_SIZE);
     // for (u64 addr = (u64)zero_page; addr < P2K(PHYSTOP); addr += PAGE_SIZE)
-    for (u64 addr = P2K(PHYSTOP) - PAGE_SIZE; addr >= (u64)zero_page; addr -= PAGE_SIZE)
+    // for (u64 addr = P2K(PHYSTOP) - PAGE_SIZE; addr >= (u64)zero_page; addr -= PAGE_SIZE)
+    for (u64 addr = round_down(P2K(PHYSTOP), PAGE_SIZE) - PAGE_SIZE; addr > (u64)zero_page; addr -= PAGE_SIZE)
     {
         Page* new_page = (Page*)addr;
         new_page->free_list_num = 0;
         new_page->block_size = 0;
         new_page->free_list_offset = 0;
+        init_rc(&new_page->rc);
         new_page->next = free_pages;
         free_pages = new_page;
     }
@@ -132,27 +134,36 @@ void *kalloc_page()
     allocated_page->next = NULL;
 
     release_spinlock(&free_pages_lock);
+    increment_rc(&allocated_page->rc);
+    print_rc((u64)allocated_page);
     return (void*)allocated_page;
 }
 
 void kfree_page(void *p)
 {
-    decrement_rc(&kalloc_page_cnt);
-    acquire_spinlock(&free_pages_lock);
-
-    // ERROR: 检查释放的页是否合法
-    if ((u64)p % PAGE_SIZE != 0)
+    return;
+    print_rc((u64)p);
+    if (p == zero_page) return;
+    printk("rc.count: %lld\n", ((Page *)p)->rc.count);
+    if (((Page *)p)->rc.count == 1)
     {
-        printk("kfree_page: Attempted to free a non-page-aligned pointer.\n");
-        return;
+        decrement_rc(&((Page *)p)->rc);
+        decrement_rc(&kalloc_page_cnt);
+        acquire_spinlock(&free_pages_lock);
+
+        // ERROR: 检查释放的页是否合法
+        if ((u64)p % PAGE_SIZE != 0)
+        {
+            printk("kfree_page: Attempted to free a non-page-aligned pointer.\n");
+            return;
+        }
+
+        Page* page = (Page*)(u64)p;
+        page->next = free_pages;
+        free_pages = page;
+
+        release_spinlock(&free_pages_lock);
     }
-
-    // 将页插入到空闲页链表
-    Page* page = (Page*)(u64)p;
-    page->next = free_pages;
-    free_pages = page;
-
-    release_spinlock(&free_pages_lock);
     return;
 }
 
@@ -203,7 +214,9 @@ void *kalloc(unsigned long long size)
         if (page->prev)
         {
             page->prev->next = page->next;
-        } else {
+        }
+        else
+        {
             allocator.free_pages[size_class] = page->next;
         }
         if (page->next)
@@ -216,20 +229,19 @@ void *kalloc(unsigned long long size)
     }
 
     release_spinlock(&allocator.locks[size_class]);
+    print_rc((u64)page);
     return (Page*)((char*)page + block_offset);
 }
 
 void kfree(void *ptr)
 {
+    print_rc((u64)ptr);
     // ERROR: 检查释放的指针是否合法
     if (!ptr)
     {
         printk("kfree: Attempted to free a NULL pointer.\n");
         return;
     }
-
-    // u64 phys_addr = K2P((u64)ptr);
-    // u64 page_phys_addr = phys_addr & ~(PAGE_SIZE - 1);
 
     void* page_virt_addr = (void*)((u64)ptr & ~(PAGE_SIZE - 1));
     Page* page = (Page*)page_virt_addr;
@@ -272,7 +284,9 @@ void kfree(void *ptr)
             if (page->prev)
             {
                 page->prev->next = page->next;
-            } else {
+            } 
+            else
+            {
                 allocator.free_pages[size_class] = page->next;
             }
             if (page->next)
@@ -304,7 +318,29 @@ u64 left_page_cnt()
 
 void kshare_page(u64 addr)
 {
+    print_rc(addr);
     printk("share page: %llx\n",addr);
-    // u64 index = PAGE_INDEX(PAGE_BASE(addr));
-    // increment_rc(&free_pages[index].ref);
+    u64 p = PAGE_BASE(addr);
+    increment_rc(&((Page*)p)->rc);
+    return;
+}
+
+void print_rc(u64 addr)
+{
+    u64 p = PAGE_BASE(addr);
+    int count = ((Page*)p)->rc.count;
+    if (count > 1)
+    {
+        Page* page = (Page*)p;
+        printk("rc: page: %llx, rc.count: %lld\n", p, page->rc.count);
+    }
+    // for (u64 addr = round_down(P2K(PHYSTOP), PAGE_SIZE) - PAGE_SIZE; addr > (u64)zero_page; addr -= PAGE_SIZE)
+    // {
+    //     Page* new_page = (Page*)addr;
+    //     if (new_page->rc.count > 0)
+    //     {
+    //         printk("rc: page: %llx, rc.count: %lld\n", addr, new_page->rc.count);
+    //     }
+    // }
+    return;
 }

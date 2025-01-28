@@ -1,11 +1,12 @@
 #include "file.h"
 #include <common/defines.h>
-#include <common/spinlock.h>
-#include <common/sem.h>
-#include <fs/inode.h>
 #include <common/list.h>
-#include <kernel/mem.h>
+#include <common/sem.h>
+#include <common/spinlock.h>
+#include <fs/inode.h>
 #include <fs/pipe.h>
+#include <kernel/mem.h>
+#include <kernel/printk.h>
 
 // the global file table.
 static struct ftable ftable;
