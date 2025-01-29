@@ -57,8 +57,6 @@ NO_RETURN void kernel_entry()
     virtio_blk_rw(&b);
     u8 *data = b.data;
     LBA = *(int *)(data + 0x1CE + 0x8);
-    // int num = *(int *)(data + 0x1CE + 0xC);
-    // printk("LBA:%d, num:%d\n", LBA, num);
     /* LAB 4 TODO 3 END */
     init_filesystem();
 
@@ -76,10 +74,7 @@ NO_RETURN void kernel_entry()
 
     Section *sec = (Section *)kalloc(sizeof(Section));
     init_section(sec);
-    if (!sec)
-    {
-        PANIC();
-    }
+    if (!sec) PANIC();
     sec->flags = ST_TEXT;
     sec->begin = INIT_ELR;
     sec->end = INIT_ELR + INIT_SIZE;
@@ -87,10 +82,7 @@ NO_RETURN void kernel_entry()
     _insert_into_list(&init_proc->pgdir.section_head, &sec->stnode);
 
     void *p = kalloc_page();
-    if (!p)
-    {
-        PANIC();
-    }
+    if (!p) PANIC();
     memset(p, 0, PAGE_SIZE);
     memcpy(p, (void*)icode, PAGE_SIZE);
     vmmap(&init_proc->pgdir, INIT_ELR, p, PTE_USER_DATA | PTE_RO);

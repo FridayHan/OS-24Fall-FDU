@@ -187,7 +187,7 @@ int handle_missing_pte(Pgdir *pd, u64 fault_addr, Section *fault_sec)
         fault_sec->fp = NULL;
         break;
     default:
-        printk("Unknown section type for missing PTE\n");
+        printk("The section type is unknown.\n");
         PANIC();
     }
     return 0;
