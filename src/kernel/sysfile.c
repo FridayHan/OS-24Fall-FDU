@@ -431,7 +431,6 @@ define_syscall(mknodat, int dirfd, const char *path, mode_t mode, dev_t dev)
 
     unsigned int ma = major(dev);
     unsigned int mi = minor(dev);
-    printk("mknodat: path '%s', major:minor %u:%u\n", path, ma, mi);
     OpContext ctx;
     bcache.begin_op(&ctx);
     if ((ip = create(path, INODE_DEVICE, (short)ma, (short)mi, &ctx)) == 0)

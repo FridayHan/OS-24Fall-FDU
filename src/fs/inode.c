@@ -68,6 +68,8 @@ void init_inodes(const SuperBlock* _sblock, const BlockCache* _cache)
     init_list_node(&head);
     sblock = _sblock;
     cache = _cache;
+    printk("ROOT_INODE_NO:%d\n", ROOT_INODE_NO);
+    printk("sblock->num_inodes:%d\n", sblock->num_inodes);
     if (ROOT_INODE_NO < sblock->num_inodes)
         inodes.root = inodes.get(ROOT_INODE_NO);
     else
