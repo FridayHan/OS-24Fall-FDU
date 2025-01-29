@@ -29,7 +29,7 @@ static void sd_read(usize block_no, u8 *buffer)
 static void sd_write(usize block_no, u8 *buffer)
 {
     Buf b;
-    b.block_no = (u32)block_no;
+    b.block_no = (u32)block_no + LBA;
     b.flags = B_DIRTY | B_VALID;
     memcpy(b.data, buffer, BLOCK_SIZE);
     virtio_blk_rw(&b);
@@ -48,24 +48,9 @@ static u8 sblock_data[BLOCK_SIZE];
 
 BlockDevice block_device;
 
-void print_super_block()
-{
-    SuperBlock *sblock = (SuperBlock *)sblock_data;
-    printk("Super Block:\n---------------------\n");
-    printk("num_blocks: %u\n", sblock->num_blocks);
-    printk("num_data_blocks: %u\n", sblock->num_data_blocks);
-    printk("num_inodes: %u\n", sblock->num_inodes);
-    printk("num_log_blocks: %u\n", sblock->num_log_blocks);
-    printk("log_start: %u\n", sblock->log_start);
-    printk("inode_start: %u\n", sblock->inode_start);
-    printk("bitmap_start: %u\n", sblock->bitmap_start);
-    printk("---------------------\n");
-}
-
 void init_block_device()
 {
     sd_read(1, sblock_data);
-    print_super_block();
     block_device.read = sd_read;
     block_device.write = sd_write;
 }

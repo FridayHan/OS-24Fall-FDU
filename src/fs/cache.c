@@ -141,13 +141,17 @@ static Block *cache_acquire(usize block_no)
             wait_sem(&block->lock);
             // printk("cache.c: wait_sem %p\n", &block->lock);
             acquire_spinlock(&lock);
-            if (get_sem(&block->lock)) break;
+            if (get_sem(&block->lock))
+            {
+                block->acquired = true;
+                break;
+            }
         }
         if (!block->acquired)
         {
             get_sem(&block->lock);
+            block->acquired = true;
         }
-        block->acquired = true;
         block->last_accessed_time = global_timestamp++;
         release_spinlock(&lock);
         return block;

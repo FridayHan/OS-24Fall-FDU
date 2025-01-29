@@ -297,6 +297,7 @@ Inode *create(const char *path, short type, short major, short minor, OpContext 
         inodes.unlock(parent_dir);
         inodes.put(ctx, parent_dir);
         new_inode = inodes.get(inode_number);
+        return new_inode;
         inodes.lock(new_inode);
 
         if (type == INODE_REGULAR && new_inode->entry.type == INODE_REGULAR)
@@ -314,22 +315,24 @@ Inode *create(const char *path, short type, short major, short minor, OpContext 
     new_inode = inodes.get(inode_number);
     inodes.lock(new_inode);
 
+    new_inode->entry.type = type;
     new_inode->entry.major = major;
     new_inode->entry.minor = minor;
     new_inode->entry.num_links = 1;
-    inodes.sync(ctx, new_inode, true);
 
     if (type == INODE_DIRECTORY)
     {
         parent_dir->entry.num_links++;
         inodes.sync(ctx, parent_dir, true);
 
-        if (inodes.insert(ctx, new_inode, ".", new_inode->inode_no) == (usize)(-1) ||
+        if (inodes.insert(ctx, new_inode, ".", inode_number) == (usize)(-1) ||
             inodes.insert(ctx, new_inode, "..", parent_dir->inode_no) == (usize)(-1))
         {
             printk("Error: Failed to create '.' and '..' at %s:%d\n", __FILE__, __LINE__);
         }
     }
+
+    inodes.sync(ctx, new_inode, true);
 
     if (inodes.insert(ctx, parent_dir, file_name, new_inode->inode_no) == (usize)(-1))
     {

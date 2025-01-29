@@ -5,7 +5,7 @@
 #include <test/test.h>
 #include <aarch64/intrinsic.h>
 #include <kernel/paging.h>
-// #include <kernel/sysproc.c>
+#include <../musl/obj/include/bits/syscall.h>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Woverride-init"

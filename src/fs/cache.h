@@ -96,6 +96,8 @@ typedef struct {
         @brief the real in-memory content of the block on disk.
      */
     u8 data[BLOCK_SIZE];
+
+    usize ref;
 } Block;
 
 /**

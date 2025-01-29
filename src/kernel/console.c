@@ -67,10 +67,7 @@ isize console_read(Inode *ip, char *dst, isize n)
         if (cons.write_idx == cons.read_idx)
         {
             release_spinlock(&cons.lock);
-            if (!wait_sem(&cons.sem))
-            {
-                return -1;
-            }
+            if (!wait_sem(&cons.sem)) return -1;
             acquire_spinlock(&cons.lock);
         }
         cons.read_idx = (cons.read_idx + 1) % INPUT_BUF_SIZE;

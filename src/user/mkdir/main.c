@@ -19,7 +19,7 @@ int main(int argc, char *argv[])
 
     for (i = 1; i < argc; i++)
     {
-        if (mkdir(argv[i], 0755) < 0)
+        if (mkdir(argv[i], 0) < 0)
         {
             fprintf(stderr, "mkdir: failed to create directory '%s': %s\n", argv[i], strerror(errno));
             continue;

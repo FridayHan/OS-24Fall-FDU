@@ -100,7 +100,7 @@ int file_stat(struct file* f, struct stat* st)
 isize file_read(struct file* f, char* addr, isize n)
 {
     /* (Final) TODO BEGIN */
-    printk("file_read: READING type=%d, off=%lld, n=%lld\n", f->type, f->off, n);
+    // printk("file_read: READING type=%d, off=%lld, n=%lld\n", f->type, f->off, n);
     if (f->readable == false)
     {
         printk("file_read: file is not readable\n");
@@ -121,10 +121,6 @@ isize file_read(struct file* f, char* addr, isize n)
     else if (f->type == FD_PIPE)
     {
         isize result = pipe_read(f->pipe, (u64)addr, n);
-        // if (result > 0)
-        // {
-        //     f->off += result;
-        // }
         return result;
     }
     printk("file_read: unknown file type\n");
@@ -142,18 +138,17 @@ isize file_write(struct file* f, char* addr, isize n)
         usize max_write_size = MIN(INODE_MAX_BYTES - f->off, (usize)n);
         usize bytes_written = 0;
 
-        while (bytes_written < max_write_size) {
-            usize write_chunk_size = MIN(
-                max_write_size - bytes_written,
-                (usize)((OP_MAX_NUM_BLOCKS - 2) * BLOCK_SIZE)  // 为了避免超出操作块的最大大小，稍微减少一些
-            );
+        while (bytes_written < max_write_size)
+        {
+            usize write_chunk_size = MIN(max_write_size - bytes_written, (usize)((OP_MAX_NUM_BLOCKS - 2) * BLOCK_SIZE));
 
             OpContext op_context;
             bcache.begin_op(&op_context);
 
             inodes.lock(f->ip);
 
-            if (inodes.write(&op_context, f->ip, (u8 *)(addr + bytes_written), f->off, write_chunk_size) != write_chunk_size) {
+            if (inodes.write(&op_context, f->ip, (u8 *)(addr + bytes_written), f->off, write_chunk_size) != write_chunk_size)
+            {
                 inodes.unlock(f->ip);
                 bcache.end_op(&op_context);
                 return -1;

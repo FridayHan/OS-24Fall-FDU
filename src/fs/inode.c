@@ -600,12 +600,11 @@ static Inode* namex(const char* path, bool nameiparent, char* name, OpContext* c
         }
 
         usize inode_no = inodes.lookup(ip, name, NULL);
-        printk("name %s, inode_no %lld\n", name, inode_no);
+        // printk("name %s, inode_no %lld\n", name, inode_no);
         if (inode_no == 0)
         {
             printk("(error) namex: inode not found: %s\n", name);
-            printk("FROM %s, %d, name %s not found!\n", __FILE__, __LINE__,
-                   name);
+            printk("FROM %s, %d, name %s not found!\n", __FILE__, __LINE__, name);
             inodes.unlock(ip);
             inodes.put(ctx, ip);
             return NULL;
@@ -614,16 +613,6 @@ static Inode* namex(const char* path, bool nameiparent, char* name, OpContext* c
         next = inodes.get(inode_no);
         inodes.unlock(ip);
         ip = next;
-
-        // // 如果不是父目录查找，并且下一个路径部分是文件路径
-        // if (!nameiparent && path[0] == '\0')
-        // {
-        //     // 如果是查找文件本身，并且路径结束，则返回当前 inode
-        //     return ip;
-        // }
-
-        // // 继续解析路径
-        // path = skipelem(path, name);
     }
 
     if (nameiparent)

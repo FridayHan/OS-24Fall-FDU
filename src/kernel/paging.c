@@ -74,7 +74,7 @@ void free_sections(struct pgdir *pd)
 
 struct section *lookup_section(struct pgdir *pd, u64 va)
 {
-    printk("lookup_section: pd=%p, va=%p\n", pd, (void *)va);
+    // printk("lookup_section: pd=%p, va=%p\n", pd, (void *)va);
     _for_in_list(node, &pd->section_head)
     {
         if (node == &pd->section_head) continue;
@@ -133,7 +133,7 @@ u64 sbrk(i64 size)
 
 int pgfault_handler(u64 iss)
 {
-    printk("Page fault: %llx\n", iss);
+    // printk("Page fault: %llx\n", iss);
     Proc *p = thisproc();
     struct pgdir *pd = &p->pgdir;
     u64 addr =
@@ -152,7 +152,7 @@ int pgfault_handler(u64 iss)
     // printk("my pid: %d\n", p->pid);
     // printk("addr: %llx\n", addr);
     struct section *sec = NULL;
-    printk("lookup_section: pd=%p, va=%p\n", pd, (void *)addr);
+    // printk("lookup_section: pd=%p, va=%p\n", pd, (void *)addr);
     acquire_spinlock(&pd->lock);
     _for_in_list(p, &pd->section_head)
     {
@@ -174,7 +174,7 @@ int pgfault_handler(u64 iss)
     // while (1)
     // {
     // }
-    printk("PTE missing: pd=%p, addr=%p, fault_sec=%p\n", pd, (void *)addr, sec);
+    // printk("PTE missing: pd=%p, addr=%p, fault_sec=%p\n", pd, (void *)addr, sec);
     switch (sec->flags) {
     case ST_HEAP:
         // printk("heap\n");
