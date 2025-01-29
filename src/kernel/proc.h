@@ -48,7 +48,7 @@ typedef struct Proc {
     ListNode ptnode;
     struct Proc *parent;
     struct schinfo schinfo;
-    struct pgdir pgdir;
+    Pgdir pgdir;
     void *kstack;
     UserContext *ucontext;
     KernelContext *kcontext;
@@ -63,6 +63,10 @@ int start_proc(Proc *, void (*entry)(u64), u64 arg);
 NO_RETURN void exit(int code);
 WARN_RESULT int wait(int *exitcode);
 WARN_RESULT int kill(int pid);
+Proc* create_child_proc(Proc *parent_proc);
+void copy_page_directory(Proc *parent_proc, Proc *child_proc);
+void copy_file_table(Proc *parent_proc, Proc *child_proc);
+void copy_working_directory(Proc *parent_proc, Proc *child_proc);
 WARN_RESULT int fork();
 
 void init_pid_pool(int initial_pid_count);

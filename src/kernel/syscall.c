@@ -59,7 +59,7 @@ bool user_accessible(const void *start, usize size, bool check_writeable)
     _for_in_list(node, &head)
     {
         if (node == &head) continue;
-        auto st = container_of(node, struct section, stnode);
+        auto st = container_of(node, Section, stnode);
         
         if (st->begin <= (u64)start && ((u64)start + size) <= st->end)
         {

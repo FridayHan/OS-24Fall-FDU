@@ -135,14 +135,12 @@ void *kalloc_page()
 
     release_spinlock(&free_pages_lock);
     increment_rc(&allocated_page->rc);
-    print_rc((u64)allocated_page);
     return (void*)allocated_page;
 }
 
 void kfree_page(void *p)
 {
     return;
-    print_rc((u64)p);
     if (p == zero_page) return;
     printk("rc.count: %lld\n", ((Page *)p)->rc.count);
     if (((Page *)p)->rc.count == 1)
@@ -229,13 +227,11 @@ void *kalloc(unsigned long long size)
     }
 
     release_spinlock(&allocator.locks[size_class]);
-    print_rc((u64)page);
     return (Page*)((char*)page + block_offset);
 }
 
 void kfree(void *ptr)
 {
-    print_rc((u64)ptr);
     // ERROR: 检查释放的指针是否合法
     if (!ptr)
     {
@@ -318,29 +314,7 @@ u64 left_page_cnt()
 
 void kshare_page(u64 addr)
 {
-    print_rc(addr);
-    printk("share page: %llx\n",addr);
     u64 p = PAGE_BASE(addr);
     increment_rc(&((Page*)p)->rc);
-    return;
-}
-
-void print_rc(u64 addr)
-{
-    u64 p = PAGE_BASE(addr);
-    int count = ((Page*)p)->rc.count;
-    if (count > 1)
-    {
-        Page* page = (Page*)p;
-        printk("rc: page: %llx, rc.count: %lld\n", p, page->rc.count);
-    }
-    // for (u64 addr = round_down(P2K(PHYSTOP), PAGE_SIZE) - PAGE_SIZE; addr > (u64)zero_page; addr -= PAGE_SIZE)
-    // {
-    //     Page* new_page = (Page*)addr;
-    //     if (new_page->rc.count > 0)
-    //     {
-    //         printk("rc: page: %llx, rc.count: %lld\n", addr, new_page->rc.count);
-    //     }
-    // }
     return;
 }

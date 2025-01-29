@@ -17,9 +17,9 @@
 #define ISS_ACC_FAULT 0X8
 #define ISS_PERMI_FAULT 0Xc
 
-void init_section(struct section *sec)
+void init_section(Section *sec)
 {
-    memset(sec, 0, sizeof(struct section));
+    memset(sec, 0, sizeof(Section));
     init_list_node(&sec->stnode);
 }
 
@@ -33,7 +33,7 @@ void init_sections(ListNode *section_head)
 /**
  * free pages referred by a section
 */
-void free_section_pages(struct pgdir *pd, struct section *sec)
+void free_section_pages(Pgdir *pd, Section *sec)
 {
     u64 begin = PAGE_BASE(sec->begin);
     u64 end = sec->end;
@@ -49,20 +49,20 @@ void free_section_pages(struct pgdir *pd, struct section *sec)
     }
 }
 
-void free_section(struct pgdir *pd, struct section *sec)
+void free_section(Pgdir *pd, Section *sec)
 {
     free_section_pages(pd, sec);
     if (sec->fp) file_close(sec->fp);
     kfree(sec);
 }
 
-void free_sections(struct pgdir *pd)
+void free_sections(Pgdir *pd)
 {
     /* (Final) TODO BEGIN */
     acquire_spinlock(&pd->lock);
     ListNode *p = pd->section_head.next;
     while (p != &(pd->section_head)) {
-        struct section *sec = container_of(p, struct section, stnode);
+        Section *sec = container_of(p, Section, stnode);
         free_section(pd, sec);
         p = p->next;
         _detach_from_list(&sec->stnode);
@@ -72,13 +72,13 @@ void free_sections(struct pgdir *pd)
     /* (Final) TODO END */
 }
 
-struct section *lookup_section(struct pgdir *pd, u64 va)
+Section *lookup_section(Pgdir *pd, u64 va)
 {
     // printk("lookup_section: pd=%p, va=%p\n", pd, (void *)va);
     _for_in_list(node, &pd->section_head)
     {
         if (node == &pd->section_head) continue;
-        struct section *sec = container_of(node, struct section, stnode);
+        Section *sec = container_of(node, Section, stnode);
         if (va >= sec->begin && va < sec->end)
             return sec;
     }
@@ -99,8 +99,8 @@ u64 sbrk(i64 size)
     // printk("sbrk size:%lld\n",size);
     ASSERT(size % PAGE_SIZE == 0);
     Proc *p = thisproc();
-    struct pgdir *pd = &p->pgdir;
-    struct section *sec;
+    Pgdir *pd = &p->pgdir;
+    Section *sec;
 
     acquire_spinlock(&pd->lock);
 
@@ -135,7 +135,7 @@ int pgfault_handler(u64 iss)
 {
     // printk("Page fault: %llx\n", iss);
     Proc *p = thisproc();
-    struct pgdir *pd = &p->pgdir;
+    Pgdir *pd = &p->pgdir;
     u64 addr =
             arch_get_far(); // Attempting to access this address caused the page fault
 
@@ -151,7 +151,7 @@ int pgfault_handler(u64 iss)
     // printk("-----------\npage fault!\n");
     // printk("my pid: %d\n", p->pid);
     // printk("addr: %llx\n", addr);
-    struct section *sec = NULL;
+    Section *sec = NULL;
     // printk("lookup_section: pd=%p, va=%p\n", pd, (void *)addr);
     acquire_spinlock(&pd->lock);
     _for_in_list(p, &pd->section_head)
@@ -159,7 +159,7 @@ int pgfault_handler(u64 iss)
         if (p == &pd->section_head) {
             continue;
         }
-        sec = container_of(p, struct section, stnode);
+        sec = container_of(p, Section, stnode);
         if (sec->begin <= addr && addr < sec->end)
             break;
         else
@@ -259,10 +259,10 @@ void copy_sections(ListNode *from_head, ListNode *to_head)
     _for_in_list(node, from_head)
     {
         if (node == from_head) continue;
-        struct section *from_sec = container_of(node, struct section, stnode);
-        struct section *to_sec = (struct section*)kalloc(sizeof(struct section));
+        Section *from_sec = container_of(node, Section, stnode);
+        Section *to_sec = (Section*)kalloc(sizeof(Section));
         if (!to_sec) PANIC();
-        memcpy(to_sec, from_sec, sizeof(struct section));
+        memcpy(to_sec, from_sec, sizeof(Section));
         _insert_into_list(to_head, &to_sec->stnode);
     }
     /* (Final) TODO END */

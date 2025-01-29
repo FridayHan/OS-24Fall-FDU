@@ -33,8 +33,19 @@ void init_oftable(struct oftable *oftable)
     }
 }
 
+void free_oftable(struct oftable *oftable)
+{
+    for (int i = 0; i < NOFILE; i++)
+    {
+        if (oftable->ofiles[i]) {
+            file_close(oftable->ofiles[i]);
+            oftable->ofiles[i] = NULL;
+        }
+    }
+}
+
 /* Allocate a file structure. */
-struct file* file_alloc()
+File* file_alloc()
 {
     /* (Final) TODO BEGIN */
     for (int i = 0; i < NFILE; i++)
@@ -51,7 +62,7 @@ struct file* file_alloc()
 }
 
 /* Increment ref count for file f. */
-struct file* file_dup(struct file* f)
+File* file_dup(File* f)
 {
     /* (Final) TODO BEGIN */
     f->ref++;
@@ -60,7 +71,7 @@ struct file* file_dup(struct file* f)
 }
 
 /* Close file f. (Decrement ref count, close when reaches 0.) */
-void file_close(struct file* f)
+void file_close(File* f)
 {
     /* (Final) TODO BEGIN */
     if (f == NULL) return;
@@ -78,12 +89,14 @@ void file_close(struct file* f)
         }
         f->type = FD_NONE;
         f->off = 0;
+        f->readable = false;
+        f->writable = false;
     }
     /* (Final) TODO END */
 }
 
 /* Get metadata about file f. */
-int file_stat(struct file* f, struct stat* st)
+int file_stat(File* f, struct stat* st)
 {
     /* (Final) TODO BEGIN */
     if (f->type == FD_INODE) {
@@ -97,7 +110,7 @@ int file_stat(struct file* f, struct stat* st)
 }
 
 /* Read from file f. */
-isize file_read(struct file* f, char* addr, isize n)
+isize file_read(File* f, char* addr, isize n)
 {
     /* (Final) TODO BEGIN */
     // printk("file_read: READING type=%d, off=%lld, n=%lld\n", f->type, f->off, n);
@@ -129,7 +142,7 @@ isize file_read(struct file* f, char* addr, isize n)
 }
 
 /* Write to file f. */
-isize file_write(struct file* f, char* addr, isize n)
+isize file_write(File* f, char* addr, isize n)
 {
     /* (Final) TODO BEGIN */
     isize total_written = 0;

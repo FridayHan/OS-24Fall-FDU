@@ -17,7 +17,7 @@
 #define USER_STACK_SIZE 0x800000      // 用户栈的大小（8MB）
 #define RESERVE_SIZE 0x40             // 栈顶保留空间的大小
 
-extern int fdalloc(struct file *f);
+extern int fdalloc(File *f);
 
 static int load_elf_header(Inode *ip, Elf64_Ehdr *elf)
 {
@@ -32,7 +32,7 @@ static int check_elf_header(Elf64_Ehdr *elf)
     return 0;
 }
 
-static int load_and_map_elf_segments(Inode *ip, Elf64_Ehdr *elf, struct pgdir *pgdir)
+static int load_and_map_elf_segments(Inode *ip, Elf64_Ehdr *elf, Pgdir *pgdir)
 {
     Elf64_Phdr phdr;
     u64 section_stack_top = 0;
@@ -44,8 +44,8 @@ static int load_and_map_elf_segments(Inode *ip, Elf64_Ehdr *elf, struct pgdir *p
 
         section_stack_top = MAX(section_stack_top, phdr.p_vaddr + phdr.p_memsz);
 
-        struct section *sec = (struct section *)kalloc(sizeof(struct section));
-        memset(sec, 0, sizeof(struct section));
+        Section *sec = (Section *)kalloc(sizeof(Section));
+        memset(sec, 0, sizeof(Section));
         init_section(sec);
         sec->begin = phdr.p_vaddr;
 
@@ -110,11 +110,11 @@ static int load_and_map_elf_segments(Inode *ip, Elf64_Ehdr *elf, struct pgdir *p
     return 0;
 }
 
-static int setup_user_stack(struct pgdir *pgdir, char *const argv[], char *const envp[])
+static int setup_user_stack(Pgdir *pgdir, char *const argv[], char *const envp[])
 {
     u64 stack_top = USER_STACK_TOP - RESERVE_SIZE;
-    struct section *st_ustack = (struct section *)kalloc(sizeof(struct section));
-    memset(st_ustack, 0, sizeof(struct section));
+    Section *st_ustack = (Section *)kalloc(sizeof(Section));
+    memset(st_ustack, 0, sizeof(Section));
     init_section(st_ustack);
     st_ustack->begin = stack_top - USER_STACK_SIZE;
     st_ustack->end = stack_top;
@@ -180,7 +180,7 @@ static int setup_user_stack(struct pgdir *pgdir, char *const argv[], char *const
 //     Elf64_Ehdr elf;
 //     Elf64_Phdr phdr;
 //     Inode* ip;
-//     struct pgdir *pgdir, *oldpgdir;
+//     Pgdir *pgdir, *oldpgdir;
 //     Proc *p = thisproc();
 
 //     /*
@@ -198,7 +198,7 @@ static int setup_user_stack(struct pgdir *pgdir, char *const argv[], char *const
 //     }
 
 //     inodes.lock(ip);
-//     pgdir = (struct pgdir *)kalloc(sizeof(pgdir));
+//     pgdir = (Pgdir *)kalloc(sizeof(pgdir));
 //     init_pgdir(pgdir);
 
 //     if (load_elf_header(ip, &elf) < 0 || check_elf_header(&elf) < 0 || load_and_map_elf_segments(ip, &elf, pgdir) < 0) {
@@ -221,7 +221,7 @@ static int setup_user_stack(struct pgdir *pgdir, char *const argv[], char *const
 //      * (1) allocate memory, va region [vaddr, vaddr+filesz)
 //      * (2) copy [offset, offset + filesz) of file to va [vaddr, vaddr+filesz) of memory
 //      * Since we have applied dynamic virtual memory management, you can try to only set the file and offset (lazy allocation)
-//      * (hints: there are two loadable program headers in most exectuable file at this lab, the first header indicates the text section(flag=RX) and the second one is the data+bss section(flag=RW). You can verify that by check the header flags. The second header has [p_vaddr, p_vaddr+p_filesz) the data section and [p_vaddr+p_filesz, p_vaddr+p_memsz) the bss section which is required to set to 0, you may have to put data and bss in a single struct section. COW by using the zero page is encouraged)
+//      * (hints: there are two loadable program headers in most exectuable file at this lab, the first header indicates the text section(flag=RX) and the second one is the data+bss section(flag=RW). You can verify that by check the header flags. The second header has [p_vaddr, p_vaddr+p_filesz) the data section and [p_vaddr+p_filesz, p_vaddr+p_memsz) the bss section which is required to set to 0, you may have to put data and bss in a single Section. COW by using the zero page is encouraged)
 //      */
 
 
@@ -257,26 +257,28 @@ int execve(const char *path, char *const argv[], char *const envp[])
 {
     Elf64_Ehdr elf;
     Inode *ip;
-    struct pgdir *pgdir, *oldpgdir;
+    Pgdir *pgdir, *oldpgdir;
     Proc *p = thisproc();
 
     OpContext ctx;
     bcache.begin_op(&ctx);
 
     /* Step 1: Load data from the file stored in `path`. */
-    printk("execve: path=%s\n", path);
-    if ((ip = namei(path, &ctx)) == 0) {
+    // printk("execve: path=%s\n", path);
+    if ((ip = namei(path, &ctx)) == 0)
+    {
         bcache.end_op(&ctx);
         return -1;
     }
 
     inodes.lock(ip);
-    pgdir = (struct pgdir *)kalloc(sizeof(struct pgdir));
+    pgdir = (Pgdir *)kalloc(sizeof(Pgdir));
     init_pgdir(pgdir);
 
     /* Step 2: Load program headers and the program itself. */
     // 加载ELF文件头、验证ELF文件头、加载程序头表
-    if (load_elf_header(ip, &elf) < 0 || check_elf_header(&elf) < 0 || load_and_map_elf_segments(ip, &elf, pgdir) < 0) {
+    if (load_elf_header(ip, &elf) < 0 || check_elf_header(&elf) < 0 || load_and_map_elf_segments(ip, &elf, pgdir) < 0)
+    {
         // 释放资源并返回错误
         free_pgdir(pgdir); // 释放新页表
         inodes.unlock(ip); // 解锁并释放inode
@@ -289,8 +291,8 @@ int execve(const char *path, char *const argv[], char *const envp[])
 
     /* Step 3: Allocate and initialize user stack. */
     // 初始化堆段
-    struct section *heap = (struct section *)kalloc(sizeof(struct section));
-    memset(heap, 0, sizeof(struct section)); // 清零堆段
+    Section *heap = (Section *)kalloc(sizeof(Section));
+    memset(heap, 0, sizeof(Section)); // 清零堆段
     heap->begin = heap->end = PAGE_BASE(elf.e_entry) + PAGE_SIZE; // 设置堆段的起始和结束地址
     heap->flags = ST_HEAP; // 设置section类型为堆段
     _insert_into_list(&pgdir->section_head, &heap->stnode); // 将堆段插入到页表的section链表中
@@ -308,7 +310,7 @@ int execve(const char *path, char *const argv[], char *const envp[])
     oldpgdir = &p->pgdir; // 保存旧页表
     free_pgdir(oldpgdir); // 释放旧页表
     p->ucontext->elr = elf.e_entry; // 设置程序入口地址
-    memcpy(&p->pgdir, pgdir, sizeof(struct pgdir)); // 复制新页表到当前进程
+    memcpy(&p->pgdir, pgdir, sizeof(Pgdir)); // 复制新页表到当前进程
     init_list_node(&p->pgdir.section_head); // 初始化新页表的section链表
     _insert_into_list(&pgdir->section_head, &p->pgdir.section_head); // 将新页表插入到section链表中
     _detach_from_list(&pgdir->section_head); // 从链表中分离新页表

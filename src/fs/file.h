@@ -51,18 +51,18 @@ void init_oftable(struct oftable*);
 /**
     @brief find an unused (i.e. ref == 0) file in the global file table and set ref to 1.
     
-    @return struct file* the found file object.
+    @return File* the found file object.
  */
-struct file* file_alloc();
+File* file_alloc();
 
 /**
     @brief duplicate a file object by increasing its reference count.
     
-    @return struct file* the same file object.
+    @return File* the same file object.
 
     @see `inode_share` does the similar thing for inode.
  */
-struct file* file_dup(struct file* f);
+File* file_dup(File* f);
 
 /**
     @brief decrease the reference count of a file object.
@@ -74,7 +74,7 @@ struct file* file_dup(struct file* f);
 
     @see `inode_put` does the similar thing for inode.
  */
-void file_close(struct file* f);
+void file_close(File* f);
 
 /**
     @brief read the metadata of a file.
@@ -86,7 +86,7 @@ void file_close(struct file* f);
 
     @see `stati` will fill `st` for an inode.
  */
-int file_stat(struct file* f, struct stat* st);
+int file_stat(File* f, struct stat* st);
 
 /**
     @brief read the content of `f` with range [f->off, f->off + n).
@@ -96,7 +96,7 @@ int file_stat(struct file* f, struct stat* st);
     @param n the number of bytes to read.
     @return isize the number of bytes actually read. -1 on error.
  */
-isize file_read(struct file* f, char* addr, isize n);
+isize file_read(File* f, char* addr, isize n);
 
 /**
     @brief write the content of `f` with range [f->off, f->off + n).
@@ -105,4 +105,4 @@ isize file_read(struct file* f, char* addr, isize n);
     @param n the number of bytes to write.
     @return isize the number of bytes actually written. -1 on error.
 */
-isize file_write(struct file* f, char* addr, isize n);
+isize file_write(File* f, char* addr, isize n);

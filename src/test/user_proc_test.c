@@ -9,14 +9,14 @@
 #include <driver/memlayout.h>
 #include <kernel/sched.h>
 
-PTEntriesPtr get_pte(struct pgdir *pgdir, u64 va, bool alloc);
+PTEntriesPtr get_pte(Pgdir *pgdir, u64 va, bool alloc);
 
 void vm_test()
 {
     printk("vm_test\n");
     static void *p[100000];
     extern RefCount kalloc_page_cnt;
-    struct pgdir pg;
+    Pgdir pg;
     int p0 = kalloc_page_cnt.count;
     init_pgdir(&pg);
     for (u64 i = 0; i < 100000; i++) {

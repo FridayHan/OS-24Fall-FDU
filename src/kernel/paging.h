@@ -13,7 +13,7 @@
 #define ST_BSS ST_FILE
 #define ST_USTACK (1 << 4)
 
-struct section {
+typedef struct section {
     u64 flags;
     u64 begin;
     u64 end;
@@ -21,19 +21,19 @@ struct section {
 
     /* The following fields are for the file-backed sections. */
 
-    struct file *fp;
+    File *fp;
     u64 offset; // Offset in file
     u64 length; // Length of mapped content in file
-};
+} Section;
 
-void init_section(struct section *);
+void init_section(Section *);
 void init_sections(ListNode *section_head);
-struct section *lookup_section(struct pgdir *pd, u64 va);
+Section *lookup_section(Pgdir *pd, u64 va);
 int pgfault_handler(u64 iss);
 void init_sections(ListNode *section_head);
 
-void free_section_pages(struct pgdir *pd, struct section *sec);
-void free_section(struct pgdir *pd, struct section *sec);
-void free_sections(struct pgdir *pd);
+void free_section_pages(Pgdir *pd, Section *sec);
+void free_section(Pgdir *pd, Section *sec);
+void free_sections(Pgdir *pd);
 void copy_sections(ListNode *from_head, ListNode *to_head);
 u64 sbrk(i64 size);

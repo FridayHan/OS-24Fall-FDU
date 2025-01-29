@@ -49,5 +49,3 @@ void kfree(void *);
 
 WARN_RESULT void *get_zero_page();
 void kshare_page(u64 addr);
-
-void print_rc(u64 addr);

@@ -273,7 +273,6 @@ int kill(int pid)
  */
 void trap_return();
 
-
 Proc* create_child_proc(Proc *parent_proc)
 {
     Proc *child_proc = create_proc();
@@ -284,8 +283,6 @@ Proc* create_child_proc(Proc *parent_proc)
     return child_proc;
 }
 
-
-// 负责复制父进程的页目录
 void copy_page_directory(Proc *parent_proc, Proc *child_proc)
 {
     acquire_spinlock(&parent_proc->pgdir.lock);
@@ -295,8 +292,8 @@ void copy_page_directory(Proc *parent_proc, Proc *child_proc)
     {
         if (section_node == sections_head) continue;
         
-        struct section *sec = container_of(section_node, struct section, stnode);
-        struct section *new_sec = (struct section *)kalloc(sizeof(struct section));
+        Section *sec = container_of(section_node, Section, stnode);
+        Section *new_sec = (Section *)kalloc(sizeof(Section));
         init_section(new_sec);
         new_sec->begin = sec->begin;
         new_sec->end = sec->end;
@@ -308,16 +305,14 @@ void copy_page_directory(Proc *parent_proc, Proc *child_proc)
             new_sec->offset = sec->offset;
             new_sec->length = sec->length;
         }
-
         _insert_into_list(&child_proc->pgdir.section_head, &new_sec->stnode);
 
-        // 处理每一页的映射
         for (u64 va = PAGE_BASE(sec->begin); va < sec->end; va += PAGE_SIZE)
         {
             PTEntriesPtr pte = get_pte(&parent_proc->pgdir, va, false);
             if (pte && (*pte & PTE_VALID))
             {
-                *pte |= PTE_RO; // 冻结共享页面
+                *pte |= PTE_RO;
                 vmmap(&child_proc->pgdir, va, (void *)P2K(PTE_ADDRESS(*pte)), PTE_FLAGS(*pte));
                 kshare_page(P2K(PTE_ADDRESS(*pte)));
             }
@@ -326,25 +321,19 @@ void copy_page_directory(Proc *parent_proc, Proc *child_proc)
     release_spinlock(&parent_proc->pgdir.lock);
 }
 
-// 负责复制父进程的文件描述符表
 void copy_file_table(Proc *parent_proc, Proc *child_proc)
 {
     memset((void *)&child_proc->oftable, 0, sizeof(struct oftable));
-
     for (int i = 0; i < NOFILE; i++)
     {
         if (parent_proc->oftable.ofiles[i])
         {
             child_proc->oftable.ofiles[i] = file_dup(parent_proc->oftable.ofiles[i]);
         }
-        else
-        {
-            break;
-        }
+        else break;
     }
 }
 
-// 负责复制父进程的工作目录
 void copy_working_directory(Proc *parent_proc, Proc *child_proc)
 {
     if (child_proc->cwd != parent_proc->cwd)
@@ -370,29 +359,14 @@ int fork()
      * 5. Set the state of the new proc to RUNNABLE.
      * 6. Activate the new proc and return its pid.
      */
-    printk("fork\n");
     Proc *parent_proc = thisproc();
-    
-    // 1. 创建子进程
     Proc *child_proc = create_child_proc(parent_proc);
-
-    // 2. 复制父进程的用户上下文
     memcpy((void *)child_proc->ucontext, (void *)parent_proc->ucontext, sizeof(UserContext));
     child_proc->ucontext->x[0] = 0;
-
-    // 3. 复制父进程的页目录
     copy_page_directory(parent_proc, child_proc);
-
-    // 4. 复制文件描述符表
     copy_file_table(parent_proc, child_proc);
-
-    // 5. 复制工作目录
     copy_working_directory(parent_proc, child_proc);
-
-    // 6. 启动子进程
     start_proc(child_proc, trap_return, 0);
-
-    // 7. 返回子进程的 PID
     return child_proc->pid;
 }
 

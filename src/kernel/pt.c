@@ -6,7 +6,7 @@
 #include <kernel/printk.h>
 #include <kernel/paging.h>
 
-PTEntriesPtr get_pte(struct pgdir *pgdir, u64 va, bool alloc)
+PTEntriesPtr get_pte(Pgdir *pgdir, u64 va, bool alloc)
 {
     // TODO:
     // Return a pointer to the PTE (Page Table Entry) for virtual address 'va'
@@ -66,14 +66,14 @@ PTEntriesPtr get_pte(struct pgdir *pgdir, u64 va, bool alloc)
     return &table[idx];
 }
 
-void init_pgdir(struct pgdir *pgdir)
+void init_pgdir(Pgdir *pgdir)
 {
     pgdir->pt = NULL;
     init_spinlock(&pgdir->lock);
     init_sections(&pgdir->section_head);
 }
 
-void free_pgdir(struct pgdir *pgdir)
+void free_pgdir(Pgdir *pgdir)
 {
     // TODO:
     // Free pages used by the page table. If pgdir->pt=NULL, do nothing.
@@ -127,7 +127,7 @@ void free_pgdir(struct pgdir *pgdir)
     free_sections(pgdir);
 }
 
-void attach_pgdir(struct pgdir *pgdir)
+void attach_pgdir(Pgdir *pgdir)
 {
     extern PTEntries invalid_pt;
     if (pgdir->pt)
@@ -141,7 +141,7 @@ void attach_pgdir(struct pgdir *pgdir)
  * address 'ka' in page directory 'pd', 'flags' is the flags for the page
  * table entry.
  */
-void vmmap(struct pgdir *pd, u64 va, void *ka, u64 flags)
+void vmmap(Pgdir *pd, u64 va, void *ka, u64 flags)
 {
     /* (Final) TODO BEGIN */
     u64 pa = (u64)K2P(ka);
@@ -161,7 +161,7 @@ void vmmap(struct pgdir *pd, u64 va, void *ka, u64 flags)
  * Allocate physical pages if required.
  * Useful when pgdir is not the current page table.
  */
-int copyout(struct pgdir *pd, void *va, void *p, usize len)
+int copyout(Pgdir *pd, void *va, void *p, usize len)
 {
     /* (Final) TODO BEGIN */
     usize total_copied = 0;

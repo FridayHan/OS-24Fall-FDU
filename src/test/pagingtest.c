@@ -23,13 +23,13 @@ void pgfault_first_test() {
     // init
     i64 limit = 10; // do not need too big
     Proc *p = thisproc();
-    struct pgdir *pd = &p->pgdir;
+    Pgdir *pd = &p->pgdir;
     ASSERT(pd->pt); // make sure the attached pt is valid
     attach_pgdir(pd);
-    struct section *st = NULL;
+    Section *st = NULL;
     _for_in_list(node, &pd->section_head) {
         if (node == &pd->section_head) continue;
-        st = container_of(node, struct section, stnode);
+        st = container_of(node, Section, stnode);
         if (st->flags & ST_HEAP)
             break;
     }
@@ -80,13 +80,13 @@ void pgfault_first_test() {
 void pgfault_second_test() {
     // init
     i64 limit = 10; // do not need too big
-    struct pgdir *pd = &thisproc()->pgdir;
+    Pgdir *pd = &thisproc()->pgdir;
     init_pgdir(pd);
     attach_pgdir(pd);
-    struct section *st = NULL;
+    Section *st = NULL;
     _for_in_list(node, &pd->section_head) {
         if (node == &pd->section_head) continue;
-        st = container_of(node, struct section, stnode);
+        st = container_of(node, Section, stnode);
         if (st->flags & ST_HEAP)
             break;
     }

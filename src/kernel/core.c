@@ -73,7 +73,7 @@ NO_RETURN void kernel_entry()
     init_proc->ucontext->spsr = INIT_SPSR;
     init_proc->ucontext->sp = INIT_SP;
 
-    struct section *sec = (struct section *)kalloc(sizeof(struct section));
+    Section *sec = (Section *)kalloc(sizeof(Section));
     init_section(sec);
     if (!sec)
     {

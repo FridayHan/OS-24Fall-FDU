@@ -34,7 +34,7 @@ struct iovec {
 /** 
  * Get the file object by fd. Return null if the fd is invalid.
  */
-static struct file *fd2file(int fd)
+static File *fd2file(int fd)
 {
     /* (Final) TODO BEGIN */
     struct oftable *oft = &thisproc()->oftable;
@@ -47,7 +47,7 @@ static struct file *fd2file(int fd)
  * Allocate a file descriptor for the given file.
  * Takes over file reference from caller on success.
  */
-int fdalloc(struct file *f)
+int fdalloc(File *f)
 {
     /* (Final) TODO BEGIN */
     Proc* p = thisproc();
@@ -89,7 +89,7 @@ define_syscall(munmap, void *addr, size_t length)
 
 define_syscall(dup, int fd)
 {
-    struct file *f = fd2file(fd);
+    File *f = fd2file(fd);
     if (!f)
         return -1;
     fd = fdalloc(f);
@@ -101,7 +101,7 @@ define_syscall(dup, int fd)
 
 define_syscall(read, int fd, char *buffer, int size)
 {
-    struct file *f = fd2file(fd);
+    File *f = fd2file(fd);
     if (!f || size <= 0 || !user_writeable(buffer, size))
         return -1;
     return file_read(f, buffer, size);
@@ -109,7 +109,7 @@ define_syscall(read, int fd, char *buffer, int size)
 
 define_syscall(write, int fd, char *buffer, int size)
 {
-    struct file *f = fd2file(fd);
+    File *f = fd2file(fd);
     if (!f || size <= 0 || !user_readable(buffer, size))
         return -1;
     return file_write(f, buffer, size);
@@ -117,7 +117,7 @@ define_syscall(write, int fd, char *buffer, int size)
 
 define_syscall(writev, int fd, struct iovec *iov, int iovcnt)
 {
-    struct file *f = fd2file(fd);
+    File *f = fd2file(fd);
     struct iovec *p;
     if (!f || iovcnt <= 0 || !user_readable(iov, sizeof(struct iovec) * iovcnt))
         return -1;
@@ -134,7 +134,7 @@ define_syscall(writev, int fd, struct iovec *iov, int iovcnt)
 define_syscall(close, int fd)
 {
     /* (Final) TODO BEGIN */
-    struct file *f = fd2file(fd);
+    File *f = fd2file(fd);
     if (!f) return -1;
     file_close(f);
     thisproc()->oftable.ofiles[fd] = NULL;
@@ -144,7 +144,7 @@ define_syscall(close, int fd)
 
 define_syscall(fstat, int fd, struct stat *st)
 {
-    struct file *f = fd2file(fd);
+    File *f = fd2file(fd);
     if (!f || !user_writeable(st, sizeof(*st)))
         return -1;
     return file_stat(f, st);
@@ -280,7 +280,7 @@ bad:
 Inode *create(const char *path, short type, short major, short minor, OpContext *ctx)
 {
     /* (Final) TODO BEGIN */
-    printk("create: path '%s', type %d, major:minor %d:%d\n", path, type, major, minor);
+    // printk("create: path '%s', type %d, major:minor %d:%d\n", path, type, major, minor);
     Inode *new_inode, *parent_dir;
     char file_name[FILE_NAME_MAX_LENGTH];
 
@@ -291,12 +291,12 @@ Inode *create(const char *path, short type, short major, short minor, OpContext 
     }
 
     inodes.lock(parent_dir);
-    usize inode_number;
-    if ((inode_number = inodes.lookup(parent_dir, file_name, 0)))
+    usize inode_no;
+    if ((inode_no = inodes.lookup(parent_dir, file_name, 0)))
     {
         inodes.unlock(parent_dir);
         inodes.put(ctx, parent_dir);
-        new_inode = inodes.get(inode_number);
+        new_inode = inodes.get(inode_no);
         return new_inode;
         inodes.lock(new_inode);
 
@@ -311,8 +311,8 @@ Inode *create(const char *path, short type, short major, short minor, OpContext 
         return NULL;
     }
 
-    inode_number = inodes.alloc(ctx, type);
-    new_inode = inodes.get(inode_number);
+    inode_no = inodes.alloc(ctx, type);
+    new_inode = inodes.get(inode_no);
     inodes.lock(new_inode);
 
     new_inode->entry.type = type;
@@ -325,7 +325,7 @@ Inode *create(const char *path, short type, short major, short minor, OpContext 
         parent_dir->entry.num_links++;
         inodes.sync(ctx, parent_dir, true);
 
-        if (inodes.insert(ctx, new_inode, ".", inode_number) == (usize)(-1) ||
+        if (inodes.insert(ctx, new_inode, ".", inode_no) == (usize)(-1) ||
             inodes.insert(ctx, new_inode, "..", parent_dir->inode_no) == (usize)(-1))
         {
             printk("Error: Failed to create '.' and '..' at %s:%d\n", __FILE__, __LINE__);
@@ -348,7 +348,7 @@ Inode *create(const char *path, short type, short major, short minor, OpContext 
 define_syscall(openat, int dirfd, const char *path, int omode)
 {
     int fd;
-    struct file *f;
+    File *f;
     Inode *ip;
 
     if (!user_strlen(path, 256)) return -1;
