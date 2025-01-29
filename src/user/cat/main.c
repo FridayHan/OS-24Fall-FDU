@@ -5,7 +5,8 @@
 #include <string.h>
 #include <unistd.h>
 
-void cat(int fd) {
+void cat(int fd)
+{
     char buffer[4096];
     ssize_t bytesRead;
 
@@ -35,7 +36,8 @@ int main(int argc, char *argv[])
     }
     else
     {
-        for (int i = 1; i < argc; ++i) {
+        for (int i = 1; i < argc; ++i)
+        {
             if ((fd = open(argv[i], O_RDONLY)) < 0)
             {
                 fprintf(stderr, "cat: cannot open %s: %s\n", argv[i], strerror(errno));

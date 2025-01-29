@@ -19,7 +19,8 @@ static volatile bool boot_secondary_cpus = false;
 
 void main()
 {
-    if (cpuid() == 0) {
+    if (cpuid() == 0)
+    {
         extern char edata[], end[];
         memset(edata, 0, (usize)(end - edata));
 
@@ -57,9 +58,10 @@ void main()
 
         // Set a flag indicating that the secondary CPUs can start executing.
         boot_secondary_cpus = true;
-    } else {
-        while (!boot_secondary_cpus)
-            ;
+    }
+    else
+    {
+        while (!boot_secondary_cpus);
         arch_fence();
         gicv3_init_percpu();
     }

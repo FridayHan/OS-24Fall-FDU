@@ -124,7 +124,6 @@ int wait(int *exitcode)
     if (_empty_list(&this->children)) return -1;
 
     wait_sem(&this->childexit);
-    // printk("proc.c: wait_sem %p\n", &this->childexit);
     acquire_spinlock(&proc_lock);
 
     _for_in_list(node, &this->children)
@@ -345,7 +344,6 @@ void copy_working_directory(Proc *parent_proc, Proc *child_proc)
         child_proc->cwd = inodes.share(parent_proc->cwd);
     }
 }
-
 
 int fork()
 {

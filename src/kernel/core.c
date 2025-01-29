@@ -23,7 +23,8 @@ extern char icode[], eicode[];
 NO_RETURN void idle_entry()
 {
     set_cpu_on();
-    while (1) {
+    while (1)
+    {
         yield();
         if (panic_flag)
         {
@@ -56,8 +57,8 @@ NO_RETURN void kernel_entry()
     virtio_blk_rw(&b);
     u8 *data = b.data;
     LBA = *(int *)(data + 0x1CE + 0x8);
-    int num = *(int *)(data + 0x1CE + 0xC);
-    printk("LBA:%d, num:%d\n", LBA, num);
+    // int num = *(int *)(data + 0x1CE + 0xC);
+    // printk("LBA:%d, num:%d\n", LBA, num);
     /* LAB 4 TODO 3 END */
     init_filesystem();
 
@@ -82,11 +83,7 @@ NO_RETURN void kernel_entry()
     sec->flags = ST_TEXT;
     sec->begin = INIT_ELR;
     sec->end = INIT_ELR + INIT_SIZE;
-    
-    // printk("init_proc->pgdir: %p\n", &init_proc->pgdir);
-    // printk("init_proc->pgdir.section_head: %p\n", &init_proc->pgdir.section_head);
-    // printk("sec: %p\n", sec);
-    // printk("sec->stnode: %p\n", &sec->stnode);
+
     _insert_into_list(&init_proc->pgdir.section_head, &sec->stnode);
 
     void *p = kalloc_page();
@@ -110,8 +107,6 @@ NO_RETURN void kernel_entry()
     // attach_pgdir(&init_proc->pgdir);
     // arch_tlbi_vmalle1is();
     // init_proc->kcontext = (KernelContext *)((u64)init_proc->ucontext - sizeof(KernelContext));
-    // printk("init_proc->kcontext: %p\n", init_proc->kcontext);
-    // printk("init_proc->ucontext: %p\n", init_proc->ucontext);
     // swtch(init_proc->kcontext, &thisproc()->kcontext);
 
     PANIC();
@@ -123,7 +118,8 @@ NO_INLINE NO_RETURN void _panic(const char *file, int line)
     printk("=====%s:%d PANIC%lld!=====\n", file, line, cpuid());
     panic_flag = true;
     set_cpu_off();
-    for (int i = 0; i < NCPU; i++) {
+    for (int i = 0; i < NCPU; i++)
+    {
         if (cpus[i].online)
             i--;
     }

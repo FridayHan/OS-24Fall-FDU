@@ -22,7 +22,8 @@ static bool __timer_cmp(rb_node lnode, rb_node rnode)
 static void __timer_set_clock()
 {
     auto node = _rb_first(&cpus[cpuid()].timer);
-    if (!node) {
+    if (!node)
+    {
         reset_clock(10);
         return;
     }
@@ -37,7 +38,8 @@ static void __timer_set_clock()
 static void timer_clock_handler()
 {
     reset_clock(10);
-    while (1) {
+    while (1)
+    {
         auto node = _rb_first(&cpus[cpuid()].timer);
         if (!node)
             break;

@@ -28,9 +28,12 @@ typedef struct section {
 
 void init_section(Section *);
 void init_sections(ListNode *section_head);
+
 Section *lookup_section(Pgdir *pd, u64 va);
+void *map_page(Pgdir *pd, u64 addr, u64 flags);
+int handle_missing_pte(Pgdir *pd, u64 fault_addr, Section *fault_sec);
+int handle_permission_fault(Pgdir *pd, u64 fault_addr, Section *fault_sec);
 int pgfault_handler(u64 iss);
-void init_sections(ListNode *section_head);
 
 void free_section_pages(Pgdir *pd, Section *sec);
 void free_section(Pgdir *pd, Section *sec);

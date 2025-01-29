@@ -36,20 +36,14 @@ void syscall_entry(UserContext *context)
     {
         x[i] = context->x[i];
     }
-    // printk("syscall_entry: syscall_id = %llu\n", syscall_id);
+
     if (syscall_id >= NR_SYSCALL || syscall_table[syscall_id] == NULL)
     {
         printk("Invalid syscall ID: %llu\n", syscall_id);
         PANIC();
     }
-    // if (syscall_id == SYS_myreport)
-    // {
-    //     printk("%lld: syscall_myreport(%llu)\n", cpuid(), x[0]);
-    // }
 
     context->x[0] = ((u64 (*)(u64, u64, u64, u64, u64, u64))syscall_table[syscall_id])(x[0], x[1], x[2], x[3], x[4], x[5]);
-    // u64 (*syscall_func)(u64, u64, u64, u64, u64, u64) = syscall_table[syscall_id];
-    // context->x[0] = syscall_func(arg0, arg1, arg2, arg3, arg4, arg5);
 }
 
 bool user_accessible(const void *start, usize size, bool check_writeable)
@@ -59,7 +53,7 @@ bool user_accessible(const void *start, usize size, bool check_writeable)
     _for_in_list(node, &head)
     {
         if (node == &head) continue;
-        auto st = container_of(node, Section, stnode);
+        Section* st = container_of(node, Section, stnode);
         
         if (st->begin <= (u64)start && ((u64)start + size) <= st->end)
         {

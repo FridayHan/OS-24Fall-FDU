@@ -7,7 +7,8 @@
 #include <common/defines.h>
 #include <kernel/printk.h>
 
-void init_filesystem() {
+void init_filesystem()
+{
     init_block_device();
 
     const SuperBlock* sblock = get_super_block();

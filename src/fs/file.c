@@ -37,7 +37,8 @@ void free_oftable(struct oftable *oftable)
 {
     for (int i = 0; i < NOFILE; i++)
     {
-        if (oftable->ofiles[i]) {
+        if (oftable->ofiles[i])
+        {
             file_close(oftable->ofiles[i]);
             oftable->ofiles[i] = NULL;
         }
@@ -99,7 +100,8 @@ void file_close(File* f)
 int file_stat(File* f, struct stat* st)
 {
     /* (Final) TODO BEGIN */
-    if (f->type == FD_INODE) {
+    if (f->type == FD_INODE)
+    {
         inodes.lock(f->ip);
         stati(f->ip, st);
         inodes.unlock(f->ip);
@@ -113,7 +115,6 @@ int file_stat(File* f, struct stat* st)
 isize file_read(File* f, char* addr, isize n)
 {
     /* (Final) TODO BEGIN */
-    // printk("file_read: READING type=%d, off=%lld, n=%lld\n", f->type, f->off, n);
     if (f->readable == false)
     {
         printk("file_read: file is not readable\n");
@@ -180,10 +181,6 @@ isize file_write(File* f, char* addr, isize n)
     else if (f->type == FD_PIPE)
     {
         isize result = pipe_write(f->pipe, (u64)addr, n);
-        // if (result > 0)
-        // {
-        //     f->off += result;
-        // }
         return result;
     }
     printk("file_write: unknown file type\n");

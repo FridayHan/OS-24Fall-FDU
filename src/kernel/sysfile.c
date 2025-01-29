@@ -280,15 +280,10 @@ bad:
 Inode *create(const char *path, short type, short major, short minor, OpContext *ctx)
 {
     /* (Final) TODO BEGIN */
-    // printk("create: path '%s', type %d, major:minor %d:%d\n", path, type, major, minor);
     Inode *new_inode, *parent_dir;
     char file_name[FILE_NAME_MAX_LENGTH];
 
-    if ((parent_dir = nameiparent(path, file_name, ctx)) == NULL)
-    {
-        printk("Error: Parent directory does not exist at %s:%d\n", __FILE__, __LINE__);
-        return NULL;
-    }
+    if ((parent_dir = nameiparent(path, file_name, ctx)) == NULL) return NULL;
 
     inodes.lock(parent_dir);
     usize inode_no;
@@ -299,13 +294,8 @@ Inode *create(const char *path, short type, short major, short minor, OpContext 
         new_inode = inodes.get(inode_no);
         return new_inode;
         inodes.lock(new_inode);
-
-        if (type == INODE_REGULAR && new_inode->entry.type == INODE_REGULAR)
-        {
-            return new_inode;
-        }
-
-        printk("Error: Type mismatch or inode exists at %s:%d\n", __FILE__, __LINE__);
+        if (type == INODE_REGULAR && new_inode->entry.type == INODE_REGULAR) return new_inode;
+        // ERROR
         inodes.unlock(new_inode);
         inodes.put(ctx, new_inode);
         return NULL;
@@ -328,7 +318,7 @@ Inode *create(const char *path, short type, short major, short minor, OpContext 
         if (inodes.insert(ctx, new_inode, ".", inode_no) == (usize)(-1) ||
             inodes.insert(ctx, new_inode, "..", parent_dir->inode_no) == (usize)(-1))
         {
-            printk("Error: Failed to create '.' and '..' at %s:%d\n", __FILE__, __LINE__);
+            printk("Error: Failed to create '.' and '..'");
         }
     }
 
@@ -336,7 +326,7 @@ Inode *create(const char *path, short type, short major, short minor, OpContext 
 
     if (inodes.insert(ctx, parent_dir, file_name, new_inode->inode_no) == (usize)(-1))
     {
-        printk("Error: Failed to insert inode into parent directory at %s:%d\n", __FILE__, __LINE__);
+        printk("Error: Failed to insert inode into parent directory");
     }
 
     inodes.unlock(parent_dir);
@@ -463,15 +453,11 @@ define_syscall(chdir, const char *path)
      * Change the cwd (current working dictionary) of current process to 'path'.
      * You may need to do some validations.
      */
-
-    // if (!user_strlen(path, 256)) return -1;
-
     OpContext ctx;
     Proc *p = thisproc();
     Inode *ip = NULL;
     bcache.begin_op(&ctx);
 
-    // 查找路径对应的 Inode
     if ((ip = namei(path, &ctx)) == NULL)
     {
         bcache.end_op(&ctx);

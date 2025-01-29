@@ -63,7 +63,8 @@ isize console_read(Inode *ip, char *dst, isize n)
     /* (Final) TODO BEGIN */
     isize i = n;
     acquire_spinlock(&cons.lock);
-    while (i) {
+    while (i)
+    {
         if (cons.write_idx == cons.read_idx)
         {
             release_spinlock(&cons.lock);
@@ -113,7 +114,10 @@ void console_intr(char c)
     default:
         if (c != 0 && cons.edit_idx - cons.read_idx < INPUT_BUF_SIZE)
         {
-            c = (c == CARRIAGE_RETURN) ? NEWLINE : c;
+            if (c == CARRIAGE_RETURN)
+            {
+                c = NEWLINE;
+            }
             cons.buf[++cons.edit_idx % INPUT_BUF_SIZE] = c;
             uart_putchar(c);
             if (c == NEWLINE || c == C('D'))
